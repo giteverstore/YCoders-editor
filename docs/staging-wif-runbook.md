@@ -1,5 +1,24 @@
 # E10.3.2 staging WIF and lifecycle runbook
 
+## Stable Preview audience contract (E10.3.3D.1A)
+
+The staging trust/runtime origin is the branch-stable Editor Preview alias:
+
+`https://ycoders-editor-staging-git-sta-16f8db-avinashabbigeris-projects.vercel.app`
+
+Both `V2_DELIVERY_SERVICE_URL` and `V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE` use this
+exact origin without a trailing slash. Immutable deployment URLs are audit and
+debug identifiers only; they are not service-auth audiences because they change
+on every Preview redeployment. The branch alias is intentionally stable while
+continuing to resolve to the latest READY deployment from
+`staging/v2-course-pilot`.
+
+The stable hostname does not broaden identity trust. Editor verification still
+requires the exact Google token audience, the exact dedicated service-account
+email, and the staging trust environment. The WIF provider independently binds
+the exact Vercel owner, owner ID, Learner project and project ID, Preview
+environment, and subject.
+
 No IAM was provisioned by repository automation. Replace every bracketed value below with the approved staging value and retain the resulting review evidence.
 
 Required identities:
