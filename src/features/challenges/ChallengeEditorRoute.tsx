@@ -1,0 +1,1 @@
+import {lazy,Suspense} from'react'; const Page=lazy(()=>import('./ChallengeEditorPage').then(m=>({default:m.ChallengeEditorPage}))); export function ChallengeEditorRoute({source='local'}:{source?:'local'|'cloud'}){return <Suspense fallback={<div>Loading Challenge editor…</div>}><Page source={source}/></Suspense>}

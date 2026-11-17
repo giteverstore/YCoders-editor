@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Emulator-only safety rules, not proposed production rules.
+    // Admin SDK tests bypass rules; browser isolation tests must be denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

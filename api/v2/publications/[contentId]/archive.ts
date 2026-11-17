@@ -1,0 +1,1 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'; import { runVercelPublicationHandler } from '../../../../src/server/vercelPublicationHandler'; export default (req: VercelRequest, res: VercelResponse) => runVercelPublicationHandler(req, res, String(req.query.contentId), 'archive')

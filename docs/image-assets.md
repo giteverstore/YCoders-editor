@@ -1,0 +1,19 @@
+# V2 image assets
+
+E8 stores private asset metadata in `editorV2Assets/{assetId}` and bytes at `editor-v2-assets/{assetId}/{sanitizedFilename}`. IDs and object paths are server-generated. Browser clients never receive Storage credentials or direct write access; emulator Storage rules deny all client operations. The server uses an object-generation precondition to prevent overwrite and compensates for a failed metadata create by removing only the newly uploaded orphan.
+
+The Vercel-compatible API supports authenticated upload, list, metadata lookup, and byte preview. Upload bodies are JSON with base64 image data and remain subject to the platform body limit. Server validation allows PNG, JPEG, and WebP only, with a 2 MiB maximum, 6,000 pixels per dimension, and 24 megapixels. It checks the filename extension, claimed MIME, binary signature, and dimensions without fully decoding image pixels. SVG, GIF, HTML, PDF, video, traversal filenames, mismatches, and malformed headers are rejected.
+
+The V2 policy mirrors the established legacy `MEDIA_MANAGE` behavior: all four recognized Admin roles receive `asset:read`, while only `SUPER_ADMIN` and `CONTENT_ADMIN` receive `asset:upload`. `CONTENT_EDITOR` can browse/select assets but cannot upload; `CONTENT_REVIEWER` can browse private assets but cannot upload or mutate draft content. This is enforced independently in the server API and reflected by frontend controls.
+
+Image blocks now support a stable `assetId` reference. The previous HTTPS `src` shape remains readable for backward compatibility, but new blocks use assets. The shared picker lists private metadata, provides role-aware upload controls, and resolves previews through the authenticated API into temporary blob URLs. Blob URLs and Storage object paths are never stored in documents. Alt text is required and captions remain optional.
+
+Course, Practice, Challenge, and Project static previews share the same renderer. It accepts stable V2 IDs or schema-approved HTTPS legacy references, preserves alt text and captions, and renders accessible loading or unavailable states. Auth tokens stay in request headers. Temporary blob URLs are revoked on replacement and unmount, and stale responses are ignored.
+
+Asset listing uses fixed ordering by creation time and asset ID, descending. Pages are bounded to 1–50 records (24 in the picker) and use an opaque base64url cursor containing only the validated ordering values. The API rejects malformed cursors and never accepts collection paths or query fields. A Load More control appends de-duplicated results. Assets created between requests can move page boundaries; under stable data, ordering prevents duplicates or gaps.
+
+Local drafts and JSON exports contain references only, never image bytes. They require network access and authorization to preview a cloud asset. Missing or inaccessible assets render an unavailable state. There is intentionally no delete or replacement API, public URL, publishing integration, offline asset database, or automatic garbage collection.
+
+Before production, verify the deployed Firestore and Storage rules, Firebase project/bucket identity, Vercel runtime service account, Storage IAM permissions, body limits, WIF trust, authorized domains, and cleanup monitoring. Public/published asset delivery and lifecycle retention belong to a later milestone.
+
+The emulator suite writes and retrieves compact PNG, JPEG, and WebP fixtures through the real Storage emulator and verifies Firestore metadata, byte integrity, private preview authorization, and the dedicated prefix. Metadata failure invokes compensating deletion of only the newly created object. If that cleanup itself fails, the API reports failure and operators must locate unregistered objects under `editor-v2-assets/` by comparing Storage IDs with `editorV2Assets`; no automatic production cleanup job exists.

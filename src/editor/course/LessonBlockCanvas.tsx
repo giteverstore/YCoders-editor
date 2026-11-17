@@ -1,0 +1,51 @@
+/* eslint-disable react-hooks/refs -- dnd-kit exposes setNodeRef/attributes/listeners specifically for render-time attachment. */
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react'
+
+import { blocksForDomain } from '../../content/blocks/block.registry'
+import type { ContentBlock } from '../../content/blocks/block.schemas'
+import type { CourseDocument } from '../../content/core/envelope'
+import { addBlock, duplicateBlock, findLesson, removeBlock, reorderBlock, updateBlock } from '../core/courseEditor.commands'
+import type { CourseEditorSelection } from '../core/courseEditor.reducer'
+import { RichTextEditor } from './RichTextEditor'
+import { ImageBlockEditor } from '../../assets/ImageBlockEditor'
+
+type Props = { document: CourseDocument; lessonId: string; selection: CourseEditorSelection; commit: (document: CourseDocument) => void; select: (selection: CourseEditorSelection) => void }
+
+function BlockFields({ block, onCommit }: { block: ContentBlock; onCommit: (block: ContentBlock) => void }) {
+  const change = (update: (draft: ContentBlock) => void) => { const draft = structuredClone(block); update(draft); onCommit(draft) }
+  switch (block.type) {
+    case 'richText': return <RichTextEditor value={block.data.document} onCommit={(document) => change((draft) => { if (draft.type === 'richText') draft.data.document = document })} />
+    case 'image': return <ImageBlockEditor block={block} onChange={onCommit} />
+    case 'code': return <div className="block-form"><label>Language<input value={block.data.language} onChange={(event) => change((draft) => { if (draft.type === 'code') draft.data.language = event.target.value })} /></label><label>Filename<input value={block.data.filename ?? ''} onChange={(event) => change((draft) => { if (draft.type === 'code') draft.data.filename = event.target.value || undefined })} /></label><label>Code<textarea rows={8} value={block.data.code} onChange={(event) => change((draft) => { if (draft.type === 'code') draft.data.code = event.target.value })} /></label></div>
+    case 'callout': return <div className="block-form"><label>Tone<select value={block.data.tone} onChange={(event) => change((draft) => { if (draft.type === 'callout') draft.data.tone = event.target.value as typeof draft.data.tone })}><option>info</option><option>tip</option><option>warning</option><option>danger</option></select></label><label>Title<input value={block.data.title ?? ''} onChange={(event) => change((draft) => { if (draft.type === 'callout') draft.data.title = event.target.value || undefined })} /></label><RichTextEditor label="Callout content" value={block.data.content} onCommit={(content) => change((draft) => { if (draft.type === 'callout') draft.data.content = content })} /></div>
+    case 'divider': return <label className="block-form">Style<select value={block.data.style} onChange={(event) => change((draft) => { if (draft.type === 'divider') draft.data.style = event.target.value as 'solid' | 'dashed' })}><option value="solid">Solid</option><option value="dashed">Dashed</option></select></label>
+    case 'table': return <div className="block-form"><label>Headers (comma separated)<input value={block.data.headers.join(', ')} onChange={(event) => change((draft) => { if (draft.type === 'table') draft.data.headers = event.target.value.split(',').map((value) => value.trim()) })} /></label><label>Rows (one row per line, comma separated)<textarea rows={5} value={block.data.rows.map((row) => row.join(', ')).join('\n')} onChange={(event) => change((draft) => { if (draft.type === 'table') draft.data.rows = event.target.value.split('\n').filter(Boolean).map((row) => row.split(',').map((value) => value.trim())) })} /></label></div>
+    case 'quiz': return <div className="block-form"><label>Question<input value={block.data.question} onChange={(event) => change((draft) => { if (draft.type === 'quiz') draft.data.question = event.target.value })} /></label>{block.data.options.map((option, index) => <label key={option.id}>Option {index + 1}<span className="inline-control"><input value={option.text} onChange={(event) => change((draft) => { if (draft.type === 'quiz') draft.data.options[index].text = event.target.value })} /><input type="checkbox" checked={option.isCorrect} onChange={(event) => change((draft) => { if (draft.type === 'quiz') draft.data.options[index].isCorrect = event.target.checked })} /> Correct</span></label>)}</div>
+    case 'exercise': return <div className="block-form"><RichTextEditor label="Exercise prompt" value={block.data.prompt} onCommit={(prompt) => change((draft) => { if (draft.type === 'exercise') draft.data.prompt = prompt })} /><label>Language<input value={block.data.language ?? ''} onChange={(event) => change((draft) => { if (draft.type === 'exercise') draft.data.language = event.target.value || undefined })} /></label><label>Starter code<textarea rows={5} value={block.data.starterCode ?? ''} onChange={(event) => change((draft) => { if (draft.type === 'exercise') draft.data.starterCode = event.target.value || undefined })} /></label></div>
+    case 'expectedOutput': return <div className="block-form"><label>Format<select value={block.data.format} onChange={(event) => change((draft) => { if (draft.type === 'expectedOutput') draft.data.format = event.target.value as 'text' | 'json' })}><option value="text">Text</option><option value="json">JSON</option></select></label><label>Expected value<textarea rows={5} value={block.data.value} onChange={(event) => change((draft) => { if (draft.type === 'expectedOutput') draft.data.value = event.target.value })} /></label></div>
+    case 'solution': return <div className="block-form"><RichTextEditor label="Solution content" value={block.data.content} onCommit={(content) => change((draft) => { if (draft.type === 'solution') draft.data.content = content })} /><p className="field-help">Optional solution code editing will be expanded in a later milestone.</p></div>
+  }
+}
+
+function SortableBlock({ block, index, count, selected, onSelect, onRemove, onDuplicate, onMove, onCommit }: { block: ContentBlock; index: number; count: number; selected: boolean; onSelect: () => void; onRemove: () => void; onDuplicate: () => void; onMove: (index: number) => void; onCommit: (block: ContentBlock) => void }) {
+  const sortable = useSortable({ id: block.id })
+  return <article ref={sortable.setNodeRef} style={{ transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }} className={`editor-block ${selected ? 'editor-block--selected' : ''}`} onClick={onSelect}>
+    <header className="editor-block__header"><button type="button" className="drag-handle" {...sortable.attributes} {...sortable.listeners} aria-label={`Drag ${block.type} block`}><GripVertical size={16} /></button><strong>{block.type}</strong><span>v{block.schemaVersion}</span><div className="editor-block__actions"><button type="button" disabled={index === 0} onClick={(event) => { event.stopPropagation(); onMove(index - 1) }} aria-label="Move up"><ArrowUp size={14} /></button><button type="button" disabled={index === count - 1} onClick={(event) => { event.stopPropagation(); onMove(index + 1) }} aria-label="Move down"><ArrowDown size={14} /></button><button type="button" onClick={(event) => { event.stopPropagation(); onDuplicate() }} aria-label="Duplicate block"><Copy size={14} /></button><button type="button" onClick={(event) => { event.stopPropagation(); if (window.confirm('Remove this block?')) onRemove() }} aria-label="Remove block"><Trash2 size={14} /></button></div></header>
+    <div onClick={(event) => event.stopPropagation()}><BlockFields block={block} onCommit={onCommit} /></div>
+  </article>
+}
+
+export function LessonBlockCanvas({ document, lessonId, selection, commit, select }: Props) {
+  const lesson = findLesson(document, lessonId)
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  if (!lesson) return <div className="empty-state"><h3>Lesson not found</h3></div>
+  const dragEnd = ({ active, over }: DragEndEvent) => { if (!over || active.id === over.id) return; const oldIndex = lesson.blocks.findIndex((block) => block.id === active.id); const newIndex = lesson.blocks.findIndex((block) => block.id === over.id); if (oldIndex >= 0 && newIndex >= 0) commit(reorderBlock(document, lessonId, String(active.id), newIndex)) }
+  return <div className="lesson-canvas"><div className="canvas-heading"><div><p className="eyebrow">Lesson canvas</p><h2>{lesson.title}</h2></div><span>{lesson.estimatedMinutes} min</span></div>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={lesson.blocks.map((block) => block.id)} strategy={verticalListSortingStrategy}><div className="block-list">{lesson.blocks.map((block, index) => <SortableBlock key={block.id} block={block} index={index} count={lesson.blocks.length} selected={selection.kind === 'block' && selection.id === block.id} onSelect={() => select({ kind: 'block', id: block.id, lessonId })} onRemove={() => commit(removeBlock(document, lessonId, block.id))} onDuplicate={() => commit(duplicateBlock(document, lessonId, block.id))} onMove={(target) => commit(reorderBlock(document, lessonId, block.id, target))} onCommit={(next) => commit(updateBlock(document, lessonId, next))} />)}</div></SortableContext></DndContext>
+    {lesson.blocks.length === 0 && <div className="canvas-empty">This lesson has no blocks. Choose one below to begin.</div>}
+    <div className="block-palette"><p className="eyebrow">Add content block</p><div>{blocksForDomain('course').map((definition) => <button type="button" key={definition.type} onClick={() => commit(addBlock(document, lessonId, definition.type))}><Plus size={14} /><span><strong>{definition.displayName}</strong><small>{definition.description}</small></span></button>)}</div></div>
+  </div>
+}

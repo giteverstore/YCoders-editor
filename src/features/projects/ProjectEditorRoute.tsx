@@ -1,0 +1,1 @@
+import{lazy,Suspense}from'react';const Page=lazy(()=>import('./ProjectEditorPage').then(m=>({default:m.ProjectEditorPage})));export function ProjectEditorRoute({source='local'}:{source?:'local'|'cloud'}){return <Suspense fallback={<div>Loading Project editor…</div>}><Page source={source}/></Suspense>}

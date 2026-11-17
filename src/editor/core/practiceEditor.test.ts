@@ -1,0 +1,14 @@
+import { describe, expect, it } from 'vitest'
+import { validateContent } from '../../content/validation/validateContent'
+import { addPracticeBlock, createPracticeDocument, duplicatePracticeBlock, removePracticeBlock, updatePractice } from './practiceEditor.commands'
+import { createPracticeEditorState, practiceEditorReducer } from './practiceEditor.reducer'
+
+const ids = () => { let n = 0; return () => `a0000000-0000-4000-8000-${String(++n).padStart(12, '0')}` as `${string}-${string}-${string}-${string}-${string}` }
+describe('Practice editor commands and history', () => {
+  it('creates an E2-valid, language-neutral Practice document', () => { const document = createPracticeDocument('2026-11-16T10:00:00.000Z', ids()); expect(validateContent(document).success).toBe(true); expect(document.content.languages.defaultLanguageId).toBe('javascript') })
+  it('edits fixed fields immutably', () => { const original = createPracticeDocument(undefined, ids()); const next = updatePractice(original, (d) => { d.title = 'Arrays'; d.content.difficulty = 'advanced' }); expect(original.title).not.toBe(next.title); expect(next.content.difficulty).toBe('advanced') })
+  it('adds, duplicates, and removes schema-approved blocks with stable IDs', () => { const factory = ids(); const original = createPracticeDocument(undefined, factory); const added = addPracticeBlock(original, 'code', factory); const duplicated = duplicatePracticeBlock(added, added.content.instructions[1].id, factory); expect(new Set(duplicated.content.instructions.map((b) => b.id)).size).toBe(3); expect(removePracticeBlock(duplicated, duplicated.content.instructions[1].id).content.instructions).toHaveLength(2) })
+  it('supports undo and redo', () => { const document = createPracticeDocument(undefined, ids()); let state = createPracticeEditorState(document); state = practiceEditorReducer(state, { type: 'commit', document: updatePractice(document, (d) => { d.title = 'Changed' }) }); state = practiceEditorReducer(state, { type: 'undo' }); expect(state.document.title).toBe(document.title); state = practiceEditorReducer(state, { type: 'redo' }); expect(state.document.title).toBe('Changed') })
+  it('reports duplicate language entries and unsupported code references', () => { const document = updatePractice(createPracticeDocument(undefined, ids()), (d) => { d.content.languages.supported.push({ ...d.content.languages.supported[0] }); d.content.starterCode.push({ languageId: 'python', code: '' }) }); const result = validateContent(document); expect(result.success).toBe(false); if (!result.success) expect(result.issues.map((i) => i.message).join(' ')).toMatch(/unique|configured|Duplicate/) })
+  it('rejects invalid verification configuration', () => { const document = createPracticeDocument(undefined, ids()); (document.content.verification as { strategy: string }).strategy = 'script'; expect(validateContent(document).success).toBe(false) })
+})
