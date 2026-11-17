@@ -1,1 +1,0 @@
-import type{VercelRequest,VercelResponse}from'@vercel/node';import{runVercelAssetHandler}from'../../../src/server/vercelAssetHandler';export default async function handler(req:VercelRequest,res:VercelResponse){await runVercelAssetHandler(req,res)}

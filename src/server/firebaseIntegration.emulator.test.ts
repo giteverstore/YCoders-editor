@@ -5,8 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import collectionHandler from '../../api/v2/drafts/index'
-import draftHandler from '../../api/v2/drafts/[id]'
+import v2AdminHandler from '../../api/v2/[...path]'
 import { createCourseDocument, updateCourse } from '../editor/core/courseEditor.commands'
 import { createPracticeDocument, updatePractice } from '../editor/core/practiceEditor.commands'
 import { createChallengeDocument, changeChallenge } from '../editor/core/challengeEditor'
@@ -207,11 +206,11 @@ async function clearAuthUsers() {
 }
 
 async function callCollection(method: string, body?: unknown, token?: string, contentType = 'application/json', contentLength?: string, draftType?: string): Promise<ApiResponse> {
-  return invoke(collectionHandler, { method, body, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(method === 'GET' ? {} : { 'content-type': contentType }), ...(contentLength ? { 'content-length': contentLength } : {}) }, query: draftType ? { contentType: draftType } : {} })
+  return invoke(v2AdminHandler, { method, url: '/api/v2/drafts', body, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(method === 'GET' ? {} : { 'content-type': contentType }), ...(contentLength ? { 'content-length': contentLength } : {}) }, query: draftType ? { contentType: draftType } : {} })
 }
 
 async function callDraft(id: string, method: string, body?: unknown, token?: string): Promise<ApiResponse> {
-  return invoke(draftHandler, { method, body, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(method === 'GET' ? {} : { 'content-type': 'application/json' }) }, query: { id } })
+  return invoke(v2AdminHandler, { method, url: `/api/v2/drafts/${encodeURIComponent(id)}`, body, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(method === 'GET' ? {} : { 'content-type': 'application/json' }) }, query: {} })
 }
 
 async function invoke(handler: (request: VercelRequest, response: VercelResponse) => Promise<void>, request: Partial<VercelRequest>): Promise<ApiResponse> {

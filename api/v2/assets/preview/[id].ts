@@ -1,1 +1,0 @@
-import type{VercelRequest,VercelResponse}from'@vercel/node';import{runVercelAssetHandler}from'../../../../src/server/vercelAssetHandler';export default async function handler(req:VercelRequest,res:VercelResponse){const id=Array.isArray(req.query.id)?req.query.id[0]:req.query.id;await runVercelAssetHandler(req,res,id,'preview')}
