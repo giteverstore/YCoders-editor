@@ -107,9 +107,10 @@ describe('consolidated V2 gateway router', () => {
 
   it('canonicalizes the internal rewrite path before service verification', async () => {
     const handler = vi.fn(async () => undefined)
-    const req = request('/api/internal-v2-gateway/courses/course-1?source=preview')
+    const req = request('/api/internal-v2-gateway/dispatch?gatewayPath=courses/course-1')
+    req.query.gatewayPath = 'courses/course-1'
     await runV2GatewayRouter(req, response().value, handler)
-    expect(req.url).toBe('/api/v2/gateway/courses/course-1?source=preview')
+    expect(req.url).toBe('/api/v2/gateway/courses/course-1')
     expect(handler).toHaveBeenCalledWith(req, expect.anything(), 'active')
   })
 })

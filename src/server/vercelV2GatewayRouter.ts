@@ -5,12 +5,18 @@ import { runGatewayCourseDeliveryHandler } from './vercelGatewayCourseDeliveryHa
 type GatewayHandler = typeof runGatewayCourseDeliveryHandler
 
 export async function runV2GatewayRouter(request: VercelRequest, response: VercelResponse, handler: GatewayHandler = runGatewayCourseDeliveryHandler): Promise<void> {
-  const path = pathSegments(request)
+  let path = pathSegments(request)
   const publicRoute = path?.[0] === 'api' && path[1] === 'v2' && path[2] === 'gateway'
   const internalRoute = path?.[0] === 'api' && path[1] === 'internal-v2-gateway'
+  const gatewayPath = queryValue(request, 'gatewayPath')
+  if (internalRoute && gatewayPath) {
+    const gatewaySegments = gatewayPath.split('/').filter(Boolean).map(decodeURIComponent)
+    path = ['api', 'internal-v2-gateway', ...gatewaySegments]
+    request.url = `/api/v2/gateway/${gatewayPath}`
+  }
   const offset = publicRoute ? 3 : internalRoute ? 2 : -1
   if (!path || offset < 0 || path[offset] !== 'courses' || !path[offset + 1]) return notFound(response)
-  if (internalRoute) request.url = request.url?.replace(/^\/api\/internal-v2-gateway/, '/api/v2/gateway')
+  if (internalRoute && !gatewayPath) request.url = request.url?.replace(/^\/api\/internal-v2-gateway/, '/api/v2/gateway')
   if (path.length === offset + 2) return runDelivery(request, response, handler, 'active', path[offset + 1])
   if (path.length === offset + 4 && path[offset + 2] === 'versions') return runDelivery(request, response, handler, 'version', path[offset + 1], path[offset + 3])
   if (path.length === offset + 6 && path[offset + 2] === 'versions' && path[offset + 4] === 'assets') return runDelivery(request, response, handler, 'asset', path[offset + 1], path[offset + 3], path[offset + 5])
@@ -28,6 +34,11 @@ function pathSegments(request: VercelRequest): string[] | undefined {
   } catch {
     return undefined
   }
+}
+
+function queryValue(request: VercelRequest, name: string): string | undefined {
+  const value = request.query[name]
+  return Array.isArray(value) ? value[0] : value
 }
 
 function notFound(response: VercelResponse): void {

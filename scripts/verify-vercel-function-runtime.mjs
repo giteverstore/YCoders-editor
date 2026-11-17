@@ -4,9 +4,14 @@ import { pathToFileURL } from 'node:url'
 
 const outputRoot = resolve('.vercel/output/functions')
 const functionDirectories = findDirectories(outputRoot, '.func')
+const outputConfig = JSON.parse(readFileSync(resolve('.vercel/output/config.json'), 'utf8'))
 
 if (functionDirectories.length !== 2) {
   throw new Error(`Expected exactly 2 generated Vercel functions, found ${functionDirectories.length}`)
+}
+
+if (!outputConfig.routes.some((route) => route.src?.includes('/api/v2/gateway') && route.dest?.startsWith('/api/internal-v2-gateway/dispatch?gatewayPath=$1'))) {
+  throw new Error('Generated Vercel routes do not dispatch the public gateway path to the isolated gateway function')
 }
 
 const expectedEntrypoints = [
