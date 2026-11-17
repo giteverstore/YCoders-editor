@@ -1,12 +1,12 @@
 import { Timestamp, type Firestore } from 'firebase-admin/firestore'
 
-import { courseDraftDocumentSchema } from '../drafts/courseDraft.schema'
-import { practiceDraftDocumentSchema } from '../drafts/practiceDraft.schema'
-import { challengeDraftDocumentSchema } from '../drafts/challengeDraft.schema'
-import { projectDraftDocumentSchema } from '../drafts/projectDraft.schema'
-import { CURRENT_SCHEMA_VERSION } from '../content/core/versions'
-import type { ContentDocument, ContentType } from '../content/core/envelope'
-import { CloudRepositoryError, type CloudDraftRecord, type CloudDraftRepository, type CloudDraftSummary } from './cloudDraft.types'
+import { courseDraftDocumentSchema } from '../drafts/courseDraft.schema.js'
+import { practiceDraftDocumentSchema } from '../drafts/practiceDraft.schema.js'
+import { challengeDraftDocumentSchema } from '../drafts/challengeDraft.schema.js'
+import { projectDraftDocumentSchema } from '../drafts/projectDraft.schema.js'
+import { CURRENT_SCHEMA_VERSION } from '../content/core/versions.js'
+import type { ContentDocument, ContentType } from '../content/core/envelope.js'
+import { CloudRepositoryError, type CloudDraftRecord, type CloudDraftRepository, type CloudDraftSummary } from './cloudDraft.types.js'
 
 export const V2_DRAFT_COLLECTION = 'editorV2Drafts'
 

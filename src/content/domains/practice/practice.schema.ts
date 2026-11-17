@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { uuidSchema } from '../../core/identifiers'
-import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared'
+import { uuidSchema } from '../../core/identifiers.js'
+import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared.js'
 
 const valueRepresentationSchema = z.discriminatedUnion('format', [
   z.object({ format: z.literal('text'), value: z.string().max(50_000) }).strict(),

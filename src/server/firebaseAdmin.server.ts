@@ -2,12 +2,12 @@ import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
-import { FirestoreCourseDraftRepository } from './firestoreDraftRepository'
-import { firebaseTokenVerifier } from './auth.server'
-import { assertEmulatorTestEnvironment } from './emulatorSafety'
-import { FirebaseAssetRepository } from './assetRepository'
-import { PublicationBackend } from './publicationBackend'
-import { CourseDeliveryService } from './courseDelivery'
+import { FirestoreCourseDraftRepository } from './firestoreDraftRepository.js'
+import { firebaseTokenVerifier } from './auth.server.js'
+import { assertEmulatorTestEnvironment } from './emulatorSafety.js'
+import { FirebaseAssetRepository } from './assetRepository.js'
+import { PublicationBackend } from './publicationBackend.js'
+import { CourseDeliveryService } from './courseDelivery.js'
 
 export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
   const production = environment.VERCEL_ENV === 'production'

@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { uuidSchema } from '../content/core/identifiers'
-import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders } from './courseDelivery'
-import { GatewayServiceAuthError, type GatewayServiceVerifier } from './gatewayServiceAuth'
+import { uuidSchema } from '../content/core/identifiers.js'
+import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders } from './courseDelivery.js'
+import { GatewayServiceAuthError, type GatewayServiceVerifier } from './gatewayServiceAuth.js'
 
 export type GatewayDeliveryRequest = { authorization?: string; correlationId?: string; method: string; path: string; contentId?: string; version?: string; assetId?: string; kind: 'active'|'version'|'asset' }
 export type GatewayDeliveryResult = { status: number; headers: Record<string,string>; body?: unknown; bytes?: Uint8Array }

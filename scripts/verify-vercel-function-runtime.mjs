@@ -1,0 +1,58 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+const outputRoot = resolve('.vercel/output/functions')
+const functionDirectories = findDirectories(outputRoot, '.func')
+
+if (functionDirectories.length !== 2) {
+  throw new Error(`Expected exactly 2 generated Vercel functions, found ${functionDirectories.length}`)
+}
+
+const expectedEntrypoints = [
+  ['api/v2/[...path].func', 'api/v2/[...path].js'],
+  ['api/v2/gateway/[...path].func', 'api/v2/gateway/[...path].js'],
+]
+
+for (const [functionPath, entryPath] of expectedEntrypoints) {
+  const functionRoot = join(outputRoot, ...functionPath.split('/'))
+  const entrypoint = join(functionRoot, ...entryPath.split('/'))
+  if (!existsSync(entrypoint)) throw new Error(`Missing generated entrypoint: ${entrypoint}`)
+
+  for (const file of findFiles(functionRoot, '.js')) {
+    if (file.includes(`${join('node_modules', '')}`)) continue
+    const source = readFileSync(file, 'utf8')
+    for (const specifier of relativeSpecifiers(source)) {
+      if (!/\.(?:js|mjs|cjs|json)$/.test(specifier)) {
+        throw new Error(`Extensionless runtime import in ${relative(functionRoot, file)}: ${specifier}`)
+      }
+      const target = resolve(dirname(file), specifier)
+      if (!existsSync(target)) {
+        throw new Error(`Unresolved runtime import in ${relative(functionRoot, file)}: ${specifier}`)
+      }
+    }
+  }
+
+  await import(`${pathToFileURL(entrypoint).href}?resolution-check=${Date.now()}`)
+}
+
+console.log('Verified 2 Vercel functions: all local ESM imports resolve and both entry modules load.')
+
+function findDirectories(root, suffix) {
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith(suffix))
+    .map((entry) => join(entry.parentPath, entry.name))
+}
+
+function findFiles(root, suffix) {
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
+    .map((entry) => join(entry.parentPath, entry.name))
+}
+
+function relativeSpecifiers(source) {
+  const values = []
+  const pattern = /(?:from\s+|import\s*(?:\(\s*)?)["'](\.{1,2}\/[^"']+)["']/g
+  for (const match of source.matchAll(pattern)) values.push(match[1])
+  return values
+}

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { isoDateTimeSchema, uuidSchema } from '../content/core/identifiers'
-import { ASSET_PREFIX } from '../assets/asset.schema'
-import { ImageValidationError, validateImage } from '../assets/imageValidation'
-import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server'
-import type { AssetRepository } from './assetRepository'
+import { isoDateTimeSchema, uuidSchema } from '../content/core/identifiers.js'
+import { ASSET_PREFIX } from '../assets/asset.schema.js'
+import { ImageValidationError, validateImage } from '../assets/imageValidation.js'
+import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server.js'
+import type { AssetRepository } from './assetRepository.js'
 type Request={method:string;authorization?:string;id?:string;action?:'preview';body?:unknown;cursor?:string;pageSize?:string}
 type Dependencies={verifier:TokenVerifier;repository:AssetRepository}
 const cursorSchema=z.object({createdAt:isoDateTimeSchema,id:uuidSchema}).strict()

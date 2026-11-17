@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPublicationServerDependencies } from './firebaseAdmin.server'
-import { handlePublicationApi } from './publicationApi'
+import { getPublicationServerDependencies } from './firebaseAdmin.server.js'
+import { handlePublicationApi } from './publicationApi.js'
 
 export async function runVercelPublicationHandler(request: VercelRequest, response: VercelResponse, contentId?: string, action?: 'prepare' | 'publish' | 'versions' | 'integrity' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive', version?: string) {
   try {

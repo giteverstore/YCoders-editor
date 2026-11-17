@@ -1,6 +1,6 @@
-import { contentEnvelopeSchema, type ChallengeDocument, type CourseDocument, type PracticeDocument, type ProjectDocument } from '../content/core/envelope'
-import type { ContentBlock } from '../content/blocks/block.schemas'
-import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types'
+import { contentEnvelopeSchema, type ChallengeDocument, type CourseDocument, type PracticeDocument, type ProjectDocument } from '../content/core/envelope.js'
+import type { ContentBlock } from '../content/blocks/block.schemas.js'
+import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
 
 const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table'])
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })

@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
-import { blockSchema } from '../content/blocks/block.schemas'
-import { actorIdSchema, isoDateTimeSchema, uuidSchema } from '../content/core/identifiers'
-import { lifecycleSchema } from '../content/core/lifecycle'
-import { CURRENT_SCHEMA_VERSION } from '../content/core/versions'
-import type { CourseDocument } from '../content/core/envelope'
-import type { DraftRecord } from './draft.types'
+import { blockSchema } from '../content/blocks/block.schemas.js'
+import { actorIdSchema, isoDateTimeSchema, uuidSchema } from '../content/core/identifiers.js'
+import { lifecycleSchema } from '../content/core/lifecycle.js'
+import { CURRENT_SCHEMA_VERSION } from '../content/core/versions.js'
+import type { CourseDocument } from '../content/core/envelope.js'
+import type { DraftRecord } from './draft.types.js'
 
 const draftText = (max: number) => z.string().max(max)
 const draftLesson = z.object({ id: uuidSchema, title: draftText(200), estimatedMinutes: z.number().int().nonnegative().max(1440), blocks: z.array(blockSchema).max(500) }).strict()

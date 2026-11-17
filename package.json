@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
+    "test:vercel-output": "node scripts/verify-vercel-function-runtime.mjs",
     "emulators:test": "firebase emulators:exec --project demo-ycoders-editor-v2 --only auth,firestore,storage \"npm run test:emulator\"",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview"

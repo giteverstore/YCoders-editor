@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { uuidSchema } from '../content/core/identifiers'
-import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server'
-import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders } from './courseDelivery'
+import { uuidSchema } from '../content/core/identifiers.js'
+import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server.js'
+import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders } from './courseDelivery.js'
 
 export type DeliveryApiRequest = { authorization?: string; contentId?: string; version?: string; assetId?: string; kind: 'active' | 'version' | 'asset' }
 export type DeliveryApiResult = { status: number; headers: Record<string, string>; body?: unknown; bytes?: Uint8Array }

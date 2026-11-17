@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { uuidSchema } from '../content/core/identifiers'
-import { contentEnvelopeSchema, contentTypeSchema } from '../content/core/envelope'
-import { courseDraftDocumentSchema } from '../drafts/courseDraft.schema'
-import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server'
-import { CloudRepositoryError, type CloudDraftRepository } from './cloudDraft.types'
+import { uuidSchema } from '../content/core/identifiers.js'
+import { contentEnvelopeSchema, contentTypeSchema } from '../content/core/envelope.js'
+import { courseDraftDocumentSchema } from '../drafts/courseDraft.schema.js'
+import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server.js'
+import { CloudRepositoryError, type CloudDraftRepository } from './cloudDraft.types.js'
 
 export const MAX_API_BODY_BYTES = 5 * 1024 * 1024
 type ApiRequest = { method: string; authorization?: string; contentType?: string; draftType?: string; body?: unknown; contentLength?: number; id?: string }

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getCourseDeliveryServerDependencies } from './firebaseAdmin.server'
-import { handleCourseDeliveryApi, type DeliveryApiRequest } from './courseDeliveryApi'
+import { getCourseDeliveryServerDependencies } from './firebaseAdmin.server.js'
+import { handleCourseDeliveryApi, type DeliveryApiRequest } from './courseDeliveryApi.js'
 
 export async function runCourseDeliveryHandler(request: VercelRequest, response: VercelResponse, kind: DeliveryApiRequest['kind']) {
   try {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { uuidSchema } from '../../core/identifiers'
-import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared'
+import { uuidSchema } from '../../core/identifiers.js'
+import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared.js'
 
 const validatorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('file-exists'), path: z.string().min(1).max(500).refine((path) => !path.includes('..'), 'Parent path segments are not allowed') }).strict(),

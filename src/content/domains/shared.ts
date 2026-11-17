@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-import { blockRegistry, type BlockDomain } from '../blocks/block.registry'
-import { blockSchema } from '../blocks/block.schemas'
-import { findDuplicateIds } from '../core/identifiers'
+import { blockRegistry, type BlockDomain } from '../blocks/block.registry.js'
+import { blockSchema } from '../blocks/block.schemas.js'
+import { findDuplicateIds } from '../core/identifiers.js'
 
 export const difficultySchema = z.enum(['beginner', 'intermediate', 'advanced'])
 export const programmingLanguageSchema = z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), displayName: z.string().min(1).max(80), version: z.string().max(40).optional() }).strict()

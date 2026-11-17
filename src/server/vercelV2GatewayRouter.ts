@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-import { runGatewayCourseDeliveryHandler } from './vercelGatewayCourseDeliveryHandler'
+import { runGatewayCourseDeliveryHandler } from './vercelGatewayCourseDeliveryHandler.js'
 
 type GatewayHandler = typeof runGatewayCourseDeliveryHandler
 

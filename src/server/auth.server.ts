@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase-admin/auth'
 
-import { hasPermission, isAdminRole, type AdminRole, type AdminPermission } from '../auth/permissions'
+import { hasPermission, isAdminRole, type AdminRole, type AdminPermission } from '../auth/permissions.js'
 
 export type VerifiedAdmin = { uid: string; role: AdminRole }
 export interface TokenVerifier { verify(token: string): Promise<{ uid: string; adminRole?: unknown }> }

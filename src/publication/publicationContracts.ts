@@ -1,9 +1,9 @@
 import { canonicalize } from 'json-canonicalize'
 import { z } from 'zod'
-import type { AdminRole } from '../auth/permissions'
-import { assetMetadataSchema } from '../assets/asset.schema'
-import { contentEnvelopeSchema, contentTypeSchema, type ContentDocument, type ContentType } from '../content/core/envelope'
-import { isoDateTimeSchema, uuidSchema } from '../content/core/identifiers'
+import type { AdminRole } from '../auth/permissions.js'
+import { assetMetadataSchema } from '../assets/asset.schema.js'
+import { contentEnvelopeSchema, contentTypeSchema, type ContentDocument, type ContentType } from '../content/core/envelope.js'
+import { isoDateTimeSchema, uuidSchema } from '../content/core/identifiers.js'
 
 export const PUBLICATION_CONTRACT_VERSION = 2 as const
 export const V2_PUBLICATION_COLLECTION = 'editorV2Publications'

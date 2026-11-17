@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { BLOCK_SCHEMA_VERSION } from '../core/versions'
-import { blockSchema, type BlockType, type ContentBlock } from './block.schemas'
+import { BLOCK_SCHEMA_VERSION } from '../core/versions.js'
+import { blockSchema, type BlockType, type ContentBlock } from './block.schemas.js'
 
 export type BlockDomain = 'course' | 'practice' | 'challenge' | 'project'
 export type BlockCategory = 'writing' | 'media' | 'code' | 'assessment' | 'structure'

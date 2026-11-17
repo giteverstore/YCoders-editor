@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-import { uuidSchema } from '../core/identifiers'
-import { BLOCK_SCHEMA_VERSION } from '../core/versions'
-import { richTextDocumentSchema } from './richText.schema'
+import { uuidSchema } from '../core/identifiers.js'
+import { BLOCK_SCHEMA_VERSION } from '../core/versions.js'
+import { richTextDocumentSchema } from './richText.schema.js'
 
 const base = { id: uuidSchema, schemaVersion: z.literal(BLOCK_SCHEMA_VERSION) }
 const codeLanguageSchema = z.string().trim().min(1).max(40)

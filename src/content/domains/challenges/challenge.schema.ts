@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { calendarDateSchema } from '../../core/identifiers'
-import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared'
+import { calendarDateSchema } from '../../core/identifiers.js'
+import { codeByLanguageSchema, difficultySchema, domainBlocksSchema, hintSchema, languageConfigurationSchema } from '../shared.js'
 
 export const challengeContentSchema = z.object({
   scheduledDate: calendarDateSchema,

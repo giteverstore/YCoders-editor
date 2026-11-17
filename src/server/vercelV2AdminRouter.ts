@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-import { runVercelAssetHandler } from './vercelAssetHandler'
-import { runCourseDeliveryHandler } from './vercelCourseDeliveryHandler'
-import { runVercelDraftHandler } from './vercelDraftHandler'
-import { runVercelPublicationHandler } from './vercelPublicationHandler'
+import { runVercelAssetHandler } from './vercelAssetHandler.js'
+import { runCourseDeliveryHandler } from './vercelCourseDeliveryHandler.js'
+import { runVercelDraftHandler } from './vercelDraftHandler.js'
+import { runVercelPublicationHandler } from './vercelPublicationHandler.js'
 
 type AdminRouterHandlers = {
   asset: typeof runVercelAssetHandler

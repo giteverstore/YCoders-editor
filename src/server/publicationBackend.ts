@@ -3,16 +3,16 @@ import type { Firestore } from 'firebase-admin/firestore'
 import type { getStorage } from 'firebase-admin/storage'
 import { z } from 'zod'
 
-import { ASSET_COLLECTION, assetMetadataSchema, type AssetMetadata } from '../assets/asset.schema'
-import { contentEnvelopeSchema, type ContentDocument } from '../content/core/envelope'
-import { uuidSchema } from '../content/core/identifiers'
+import { ASSET_COLLECTION, assetMetadataSchema, type AssetMetadata } from '../assets/asset.schema.js'
+import { contentEnvelopeSchema, type ContentDocument } from '../content/core/envelope.js'
+import { uuidSchema } from '../content/core/identifiers.js'
 import {
   PUBLICATION_CONTRACT_VERSION, V2_PUBLICATION_AUDIT_COLLECTION, V2_PUBLICATION_COLLECTION,
   assetManifestEntrySchema, canonicalJson, canTransition, collectAssetIds, compareStableIds, lifecycleConfirmationSchema, nextState,
   publicationPointerSchema, publishConfirmationSchema, sha256Canonical, validatePublicationCompatibility,
   type PublicationIdentity,
-} from '../publication/publicationContracts'
-import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository'
+} from '../publication/publicationContracts.js'
+import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 export const V2_PUBLICATION_REQUEST_COLLECTION = 'editorV2PublicationRequests'

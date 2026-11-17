@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getCourseDeliveryServerDependencies } from './firebaseAdmin.server'
-import { handleGatewayCourseDeliveryApi, type GatewayDeliveryRequest } from './gatewayCourseDeliveryApi'
-import { createGatewayServiceVerifier } from './gatewayServiceAuth'
+import { getCourseDeliveryServerDependencies } from './firebaseAdmin.server.js'
+import { handleGatewayCourseDeliveryApi, type GatewayDeliveryRequest } from './gatewayCourseDeliveryApi.js'
+import { createGatewayServiceVerifier } from './gatewayServiceAuth.js'
 
 export async function runGatewayCourseDeliveryHandler(request: VercelRequest, response: VercelResponse, kind: GatewayDeliveryRequest['kind']) {
   const startedAt = Date.now()

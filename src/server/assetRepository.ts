@@ -1,6 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore'
 import type { getStorage } from 'firebase-admin/storage'
-import { ASSET_COLLECTION, ASSET_PREFIX, assetMetadataSchema, type AssetMetadata } from '../assets/asset.schema'
+import { ASSET_COLLECTION, ASSET_PREFIX, assetMetadataSchema, type AssetMetadata } from '../assets/asset.schema.js'
 type Bucket=ReturnType<ReturnType<typeof getStorage>['bucket']>
 export type AssetCursor={createdAt:string;id:string}
 export interface AssetRepository{create(input:Omit<AssetMetadata,'createdAt'|'status'>,bytes:Uint8Array):Promise<AssetMetadata>;list(limit:number,after?:AssetCursor):Promise<AssetMetadata[]>;get(id:string):Promise<AssetMetadata|null>;bytes(asset:AssetMetadata):Promise<Uint8Array>}

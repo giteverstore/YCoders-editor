@@ -1,4 +1,4 @@
-import{MAX_IMAGE_BYTES,MAX_IMAGE_DIMENSION,MAX_IMAGE_PIXELS,type AssetMetadata}from'./asset.schema'
+import{MAX_IMAGE_BYTES,MAX_IMAGE_DIMENSION,MAX_IMAGE_PIXELS,type AssetMetadata}from'./asset.schema.js'
 export class ImageValidationError extends Error{constructor(message:string,readonly code:string){super(message);this.name='ImageValidationError'}}
 const allowed:Record<string,{mime:AssetMetadata['mimeType'];ext:string[]}>= {png:{mime:'image/png',ext:['png']},jpeg:{mime:'image/jpeg',ext:['jpg','jpeg']},webp:{mime:'image/webp',ext:['webp']}}
 export function safeImageFilename(name:string){const leaf=name.replaceAll('\\','/').split('/').at(-1)??'';const cleaned=leaf.normalize('NFKC').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^[.-]+/,'').slice(0,120);if(!cleaned||cleaned.includes('..'))throw new ImageValidationError('Invalid filename','INVALID_FILENAME');return cleaned}

@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto'
 import type { Firestore } from 'firebase-admin/firestore'
 import type { getStorage } from 'firebase-admin/storage'
 import { z } from 'zod'
-import { contentEnvelopeSchema, type CourseDocument } from '../content/core/envelope'
-import { assetManifestEntrySchema, canonicalJson, contentHashSchema, publicationIdentitySchema, V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts'
-import { adaptCourse } from '../integration/learnerAdapters'
-import type { AdapterFinding, AssetDeliveryDescriptor, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types'
+import { contentEnvelopeSchema, type CourseDocument } from '../content/core/envelope.js'
+import { assetManifestEntrySchema, canonicalJson, contentHashSchema, publicationIdentitySchema, V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts.js'
+import { adaptCourse } from '../integration/learnerAdapters.js'
+import type { AdapterFinding, AssetDeliveryDescriptor, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 type VersionRecord = { identity: z.infer<typeof publicationIdentitySchema>; schemaVersion: string; artifactPath: string; artifactHash: string; documentHash: string; assetManifest: z.infer<typeof assetManifestEntrySchema>[]; assetManifestHash: string; status: string }

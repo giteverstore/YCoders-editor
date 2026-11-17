@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { uuidSchema } from '../content/core/identifiers'
-import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server'
-import { lifecycleInputSchema, PublicationBackend, PublicationError, publicationInputSchema, publicationPreparationInputSchema } from './publicationBackend'
+import { uuidSchema } from '../content/core/identifiers.js'
+import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server.js'
+import { lifecycleInputSchema, PublicationBackend, PublicationError, publicationInputSchema, publicationPreparationInputSchema } from './publicationBackend.js'
 
 type Request = { method: string; authorization?: string; contentId?: string; version?: string; action?: 'prepare' | 'publish' | 'versions' | 'integrity' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'; body?: unknown }
 type Dependencies = { verifier: TokenVerifier; backend: PublicationBackend }

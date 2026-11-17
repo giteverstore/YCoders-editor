@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-import { challengeContentSchema } from '../domains/challenges/challenge.schema'
-import { courseContentSchema } from '../domains/courses/course.schema'
-import { practiceContentSchema } from '../domains/practice/practice.schema'
-import { projectContentSchema } from '../domains/projects/project.schema'
-import { actorIdSchema, isoDateTimeSchema, slugSchema, uuidSchema } from './identifiers'
-import { lifecycleSchema } from './lifecycle'
-import { CURRENT_SCHEMA_VERSION } from './versions'
+import { challengeContentSchema } from '../domains/challenges/challenge.schema.js'
+import { courseContentSchema } from '../domains/courses/course.schema.js'
+import { practiceContentSchema } from '../domains/practice/practice.schema.js'
+import { projectContentSchema } from '../domains/projects/project.schema.js'
+import { actorIdSchema, isoDateTimeSchema, slugSchema, uuidSchema } from './identifiers.js'
+import { lifecycleSchema } from './lifecycle.js'
+import { CURRENT_SCHEMA_VERSION } from './versions.js'
 
 export const contentTypeSchema = z.enum(['course', 'practice', 'challenge', 'project'])
 export type ContentType = z.infer<typeof contentTypeSchema>

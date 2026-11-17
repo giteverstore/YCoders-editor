@@ -1,4 +1,4 @@
-import type { ContentDocument, ContentType } from '../content/core/envelope'
+import type { ContentDocument, ContentType } from '../content/core/envelope.js'
 
 export type CloudDraftRecord = {
   id: string

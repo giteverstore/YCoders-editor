@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { uuidSchema } from '../../core/identifiers'
-import { domainBlocksSchema, difficultySchema } from '../shared'
+import { uuidSchema } from '../../core/identifiers.js'
+import { domainBlocksSchema, difficultySchema } from '../shared.js'
 
 const lessonSchema = z.object({
   id: uuidSchema,

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-import { handleDraftApi } from './draftApi'
-import { getServerDependencies } from './firebaseAdmin.server'
+import { handleDraftApi } from './draftApi.js'
+import { getServerDependencies } from './firebaseAdmin.server.js'
 
 export async function runVercelDraftHandler(request: VercelRequest, response: VercelResponse, id?: string): Promise<void> {
   try {
