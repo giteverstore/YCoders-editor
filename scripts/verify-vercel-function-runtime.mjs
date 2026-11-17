@@ -11,7 +11,7 @@ if (functionDirectories.length !== 2) {
 
 const expectedEntrypoints = [
   ['api/v2/[...path].func', 'api/v2/[...path].js'],
-  ['api/v2/gateway/[...path].func', 'api/v2/gateway/[...path].js'],
+  ['api/internal-v2-gateway/[...path].func', 'api/internal-v2-gateway/[...path].js'],
 ]
 
 for (const [functionPath, entryPath] of expectedEntrypoints) {
