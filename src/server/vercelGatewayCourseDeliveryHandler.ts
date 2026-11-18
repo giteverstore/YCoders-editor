@@ -17,7 +17,11 @@ export async function runGatewayCourseDeliveryHandler(request: VercelRequest, re
     console.info('v2_gateway.delivery', { serviceId, namespace:'v2', contentType:'course', contentId, requestedPublicationVersion:version ?? null, mode:kind === 'active' ? 'active' : 'exact', resultCode:result.status, correlationId:correlationId ?? null, latencyMs:Date.now()-startedAt })
     Object.entries(result.headers).forEach(([name, header]) => response.setHeader(name, header))
     if (result.bytes) response.status(result.status).send(Buffer.from(result.bytes)); else response.status(result.status).json(result.body)
-  } catch { response.status(503).setHeader('Cache-Control', 'private, no-store').json({ ok: false, error: { code: 'V2_DELIVERY_FAILURE', message: 'V2 gateway delivery is unavailable' } }) }
+  } catch (error) {
+    const classified = error as { name?: unknown; code?: unknown }
+    console.error('v2_gateway.failure', { name: typeof classified?.name === 'string' ? classified.name : 'Error', code: typeof classified?.code === 'string' || typeof classified?.code === 'number' ? classified.code : 'unknown' })
+    response.status(503).setHeader('Cache-Control', 'private, no-store').json({ ok: false, error: { code: 'V2_DELIVERY_FAILURE', message: 'V2 gateway delivery is unavailable' } })
+  }
 }
 
 export function createLazyCourseDeliveryService(factory = () => getCourseDeliveryServerDependencies().service): CourseDeliveryService {
