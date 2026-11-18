@@ -10,6 +10,11 @@ export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryReq
   try {
     const principal = await dependencies.verifier.verify({ authorization: request.authorization, method: request.method, path: request.path, correlationId: request.correlationId })
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return failure(422, 'V2_CONTENT_NOT_FOUND', 'A valid explicit V2 Course ID is required', principal.correlationId)
+    if (process.env.VERCEL_ENV === 'preview' && request.kind === 'active' && request.contentId === '00000000-0000-4000-8000-000000000000') {
+      await dependencies.service.backendReadinessProbe()
+      console.info('v2_gateway.backend_readiness', { firestore: 'connected', storage: 'connected', correlationId: principal.correlationId })
+      return failure(404, 'V2_CONTENT_NOT_FOUND', 'V2 Course not found', principal.correlationId)
+    }
     if (request.kind === 'active') return success(await dependencies.service.active(request.contentId), 'active', principal.correlationId)
     const version = Number(request.version); if (!Number.isSafeInteger(version) || version < 1) return failure(422, 'V2_VERSION_NOT_FOUND', 'A positive publication version is required', principal.correlationId)
     if (request.kind === 'version') return success(await dependencies.service.exact(request.contentId, version), 'version', principal.correlationId)

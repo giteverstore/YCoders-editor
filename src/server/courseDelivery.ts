@@ -23,6 +23,12 @@ export class CourseDeliveryService {
     if (!isActivelyDiscoverable(value.state, value.visibility) || !value.activeVersionNumber) throw new DeliveryError('V2_NOT_DISCOVERABLE', 'V2 Course is not available through active discovery', 404)
     return this.exact(contentId, value.activeVersionNumber)
   }
+  async backendReadinessProbe(): Promise<void> {
+    await Promise.all([
+      this.firestore.collection(V2_PUBLICATION_COLLECTION).doc('00000000-0000-4000-8000-000000000000').get(),
+      this.bucket.file('editor-v2-d2-smoke/nonexistent').exists(),
+    ])
+  }
   async exact(contentId: string, version: number): Promise<DeliveryCourseEnvelope> {
     const { record, document } = await this.verifiedVersion(contentId, version)
     const result = adaptCourse({ identity: record.identity, document, assetManifest: record.assetManifest as PublishedAssetManifestEntry[] })
