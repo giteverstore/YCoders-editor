@@ -43,6 +43,22 @@ export function createFirebaseBackendWifCredential(
   IdentityPoolClientClass = IdentityPoolClient,
   ImpersonatedClass = Impersonated,
 ): Credential {
+  const impersonated = createFirebaseBackendWifAuthClient(environment, tokenSource, IdentityPoolClientClass, ImpersonatedClass)
+  return {
+    async getAccessToken(): Promise<GoogleOAuthAccessToken> {
+      const result = await impersonated.getAccessToken()
+      if (!result.token) throw new FirebaseBackendCredentialError('Editor staging backend access token is unavailable')
+      return { access_token: result.token, expires_in: 540 }
+    },
+  }
+}
+
+export function createFirebaseBackendWifAuthClient(
+  environment: NodeJS.ProcessEnv = process.env,
+  tokenSource: () => Promise<string> = () => verifiedEditorOidcToken(getVercelOidcToken, environment),
+  IdentityPoolClientClass = IdentityPoolClient,
+  ImpersonatedClass = Impersonated,
+): Impersonated {
   const configuration = resolveFirebaseBackendWifConfig(environment)
   const source = new IdentityPoolClientClass({
     type: 'external_account',
@@ -52,14 +68,7 @@ export function createFirebaseBackendWifCredential(
     subject_token_supplier: { getSubjectToken: tokenSource },
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
   })
-  const impersonated = new ImpersonatedClass({ sourceClient: source, targetPrincipal: configuration.serviceAccountEmail, targetScopes: ['https://www.googleapis.com/auth/cloud-platform'], lifetime: 600 })
-  return {
-    async getAccessToken(): Promise<GoogleOAuthAccessToken> {
-      const result = await impersonated.getAccessToken()
-      if (!result.token) throw new FirebaseBackendCredentialError('Editor staging backend access token is unavailable')
-      return { access_token: result.token, expires_in: 540 }
-    },
-  }
+  return new ImpersonatedClass({ sourceClient: source, targetPrincipal: configuration.serviceAccountEmail, targetScopes: ['https://www.googleapis.com/auth/cloud-platform'], lifetime: 600 })
 }
 
 async function verifiedEditorOidcToken(source: () => Promise<string>, environment: NodeJS.ProcessEnv): Promise<string> {

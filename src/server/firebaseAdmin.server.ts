@@ -1,6 +1,8 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { Firestore } from '@google-cloud/firestore'
+import { Storage } from '@google-cloud/storage'
 
 import { FirestoreCourseDraftRepository } from './firestoreDraftRepository.js'
 import { firebaseTokenVerifier } from './auth.server.js'
@@ -8,7 +10,7 @@ import { assertEmulatorTestEnvironment } from './emulatorSafety.js'
 import { FirebaseAssetRepository } from './assetRepository.js'
 import { PublicationBackend } from './publicationBackend.js'
 import { CourseDeliveryService } from './courseDelivery.js'
-import { createFirebaseBackendWifCredential, resolveFirebaseBackendWifConfig } from './firebaseBackendCredential.js'
+import { createFirebaseBackendWifAuthClient, createFirebaseBackendWifCredential, resolveFirebaseBackendWifConfig } from './firebaseBackendCredential.js'
 
 export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
   const production = environment.VERCEL_ENV === 'production'
@@ -29,29 +31,36 @@ function firebaseOptions(environment: NodeJS.ProcessEnv = process.env) {
   return { credential: applicationDefault(), projectId: environment.FIREBASE_ADMIN_PROJECT_ID, storageBucket: environment.FIREBASE_STORAGE_BUCKET ?? `${environment.FIREBASE_ADMIN_PROJECT_ID}.appspot.com` }
 }
 
+function firebaseResources(environment: NodeJS.ProcessEnv = process.env) {
+  assertSafeAdminEnvironment(environment)
+  const options = firebaseOptions(environment)
+  const app = getApps()[0] ?? initializeApp(options)
+  if (environment.VERCEL_ENV === 'preview' && !environment.FIRESTORE_EMULATOR_HOST) {
+    const config = resolveFirebaseBackendWifConfig(environment), authClient = createFirebaseBackendWifAuthClient(environment)
+    return { app, firestore: new Firestore({ projectId: config.projectId, databaseId: '(default)', preferRest: true, authClient }), bucket: new Storage({ projectId: config.projectId, authClient }).bucket(config.storageBucket) }
+  }
+  return { app, firestore: getFirestore(app), bucket: getStorage(app).bucket(options.storageBucket) }
+}
+
 export function getAssetServerDependencies() {
-  assertSafeAdminEnvironment()
   if (!process.env.VERCEL_ENV && !process.env.FIREBASE_STORAGE_EMULATOR_HOST) throw new Error('Non-production asset service requires the Storage emulator')
-  const options = firebaseOptions(), app = getApps()[0] ?? initializeApp(options)
-  return { verifier: firebaseTokenVerifier, repository: new FirebaseAssetRepository(getFirestore(app), getStorage(app).bucket(options.storageBucket)) }
+  const resources = firebaseResources()
+  return { verifier: firebaseTokenVerifier, repository: new FirebaseAssetRepository(resources.firestore, resources.bucket) }
 }
 
 export function getServerDependencies() {
-  assertSafeAdminEnvironment()
-  const app = getApps()[0] ?? initializeApp(firebaseOptions())
-  return { verifier: firebaseTokenVerifier, repository: new FirestoreCourseDraftRepository(getFirestore(app)) }
+  const resources = firebaseResources()
+  return { verifier: firebaseTokenVerifier, repository: new FirestoreCourseDraftRepository(resources.firestore) }
 }
 
 export function getPublicationServerDependencies() {
-  assertSafeAdminEnvironment()
   if (!process.env.VERCEL_ENV && !process.env.FIREBASE_STORAGE_EMULATOR_HOST) throw new Error('Non-production publication service requires the Storage emulator')
-  const options = firebaseOptions(), bucketName = options.storageBucket!
-  const app = getApps()[0] ?? initializeApp(options)
-  return { verifier: firebaseTokenVerifier, backend: new PublicationBackend(getFirestore(app), getStorage(app).bucket(bucketName)) }
+  const resources = firebaseResources()
+  return { verifier: firebaseTokenVerifier, backend: new PublicationBackend(resources.firestore, resources.bucket) }
 }
 
 export function getCourseDeliveryServerDependencies() {
   const publication = getPublicationServerDependencies()
-  const app = getApps()[0]!
-  return { verifier: publication.verifier, service: new CourseDeliveryService(getFirestore(app), getStorage(app).bucket(firebaseOptions().storageBucket)) }
+  const resources = firebaseResources()
+  return { verifier: publication.verifier, service: new CourseDeliveryService(resources.firestore, resources.bucket) }
 }
