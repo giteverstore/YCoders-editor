@@ -9,7 +9,7 @@ type TokenProvider = (forceRefresh?: boolean) => Promise<string>
 type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string; details?: unknown } }
 
 export class V2DraftApiClient {
-  constructor(private readonly getToken: TokenProvider, private readonly baseUrl = '/api/v2/drafts', private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly getToken: TokenProvider, private readonly baseUrl = '/api/v2/drafts', private readonly request: typeof fetch = globalThis.fetch.bind(globalThis)) {}
 
   list(contentType: ContentType = 'course'): Promise<CloudDraftSummary[]> { return this.call<CloudDraftSummary[]>(`?contentType=${contentType}`, { method: 'GET' }) }
   get(id: string): Promise<CloudDraftRecord> { return this.call<CloudDraftRecord>(`/${encodeURIComponent(id)}`, { method: 'GET' }) }
