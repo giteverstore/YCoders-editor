@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PublicationApiClient, PublicationApiError, publicationErrorMessage, type PublicationPreparation } from './publicationClient'
 import { publicationEntryState } from './publicationWorkflowPolicy'
 import { lifecycleOperations } from './publicationWorkflowPolicy'
@@ -17,6 +17,24 @@ describe('publication workflow policy', () => {
 })
 
 describe('PublicationApiClient', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('invokes the default fetch implementation with the browser global as its receiver', async () => {
+    const request = vi.fn(function (this: typeof globalThis, input: RequestInfo | URL, init?: RequestInit) {
+      expect(this).toBe(globalThis)
+      expect(input).toBe(`/api/v2/publications/${preparation().contentId}/prepare`)
+      expect(init?.headers).toEqual({ Authorization: 'Bearer staging-token', 'Content-Type': 'application/json' })
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, data: preparation() }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+    })
+    vi.stubGlobal('fetch', request)
+
+    await expect(new PublicationApiClient(async () => 'staging-token').prepare(preparation().contentId, 3)).resolves.toMatchObject({ draftRevision: 3 })
+    expect(request).toHaveBeenCalledOnce()
+  })
+
   it('uses authoritative preparation facts in all three confirmations', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { identity: { namespace: 'v2', contentType: 'course', contentId: preparation().contentId, publicationVersion: 2 }, pointerRevision: 2, artifactPath: 'x', artifactHash: `sha256:${'4'.repeat(64)}`, replayed: false } }), { status: 201, headers: { 'content-type': 'application/json' } }))
     const client = new PublicationApiClient(async () => 'secret-token', '/api', request), context = preparation()

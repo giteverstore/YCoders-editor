@@ -23,7 +23,7 @@ export class PublicationApiError extends Error {
 }
 
 export class PublicationApiClient {
-  constructor(private readonly token: TokenProvider, private readonly base = '/api/v2/publications', private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly token: TokenProvider, private readonly base = '/api/v2/publications', private readonly request: typeof fetch = globalThis.fetch.bind(globalThis)) {}
   pointer(id: string) { return this.call<PublicationPointer>(`/${encodeURIComponent(id)}`, { method: 'GET' }) }
   versions(id: string) { return this.call<PublicationVersionSummary[]>(`/${encodeURIComponent(id)}/versions`, { method: 'GET' }) }
   version(id: string, version: number) { return this.call<PublicationVersionDetail>(`/${encodeURIComponent(id)}/versions/${version}`, { method: 'GET' }) }
