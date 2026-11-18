@@ -31,5 +31,6 @@ export function createLazyCourseDeliveryService(factory = () => getCourseDeliver
     active: (contentId) => current().active(contentId),
     exact: (contentId, version) => current().exact(contentId, version),
     asset: (contentId, version, assetId) => current().asset(contentId, version, assetId),
+    backendReadinessProbe: () => current().backendReadinessProbe(),
   } as CourseDeliveryService
 }
