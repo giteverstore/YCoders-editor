@@ -20,6 +20,8 @@ export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryReq
     if (error instanceof GatewayServiceAuthError) return failure(error.status, error.code, error.message, request.correlationId)
     if (error instanceof DeliveryError) return failure(error.status, error.code, error.message, request.correlationId, error.details)
     if (error instanceof z.ZodError) return failure(503, 'V2_INTEGRITY_FAILURE', 'V2 Course data failed integrity validation', request.correlationId)
+    const classified = error as { name?: unknown; code?: unknown }
+    console.error('v2_gateway.backend_failure', { name: typeof classified?.name === 'string' ? classified.name : 'Error', code: typeof classified?.code === 'string' || typeof classified?.code === 'number' ? classified.code : 'unknown' })
     return failure(500, 'V2_DELIVERY_FAILURE', 'V2 Course gateway delivery could not be completed', request.correlationId)
   }
 }
