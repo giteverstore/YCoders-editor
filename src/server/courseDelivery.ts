@@ -26,7 +26,7 @@ export class CourseDeliveryService {
   async backendReadinessProbe(): Promise<void> {
     await Promise.all([
       this.firestore.collection(V2_PUBLICATION_COLLECTION).doc('00000000-0000-4000-8000-000000000000').get(),
-      this.bucket.file('editor-v2-d2-smoke/nonexistent').exists(),
+      this.bucket.file('editor-v2-d2-smoke/nonexistent').getMetadata().then(() => undefined).catch((error: { code?: unknown }) => { if (error?.code !== 404) throw error }),
     ])
   }
   async exact(contentId: string, version: number): Promise<DeliveryCourseEnvelope> {
