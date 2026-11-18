@@ -24,10 +24,11 @@ export class CourseDeliveryService {
     return this.exact(contentId, value.activeVersionNumber)
   }
   async backendReadinessProbe(): Promise<void> {
-    await Promise.all([
-      this.firestore.collection(V2_PUBLICATION_COLLECTION).doc('00000000-0000-4000-8000-000000000000').get(),
-      this.bucket.file('editor-v2-d2-smoke/nonexistent').getMetadata().then(() => undefined).catch((error: { code?: unknown }) => { if (error?.code !== 404) throw error }),
-    ])
+    await this.firestore.collection(V2_PUBLICATION_COLLECTION).doc('00000000-0000-4000-8000-000000000000').get()
+    console.info('v2_gateway.backend_readiness_stage', { stage: 'firestore-read' })
+    const file = this.bucket.file('editor-v2-d2-smoke/nonexistent')
+    console.info('v2_gateway.backend_readiness_stage', { stage: 'storage-file', metadataMethod: typeof file.getMetadata })
+    await file.getMetadata().then(() => undefined).catch((error: { code?: unknown }) => { if (Number(error?.code) !== 404) throw error })
   }
   async exact(contentId: string, version: number): Promise<DeliveryCourseEnvelope> {
     const { record, document } = await this.verifiedVersion(contentId, version)
