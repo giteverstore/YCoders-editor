@@ -19,8 +19,8 @@ const defaultHandlers: AdminRouterHandlers = {
   publication: runVercelPublicationHandler,
 }
 
-const publicationActions = new Set(['prepare', 'publish', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'] as const)
-type PublicationAction = 'prepare' | 'publish' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'
+const publicationActions = new Set(['prepare', 'publish', 'release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'] as const)
+type PublicationAction = 'prepare' | 'publish' | 'release' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'
 
 export async function runV2AdminRouter(
   request: VercelRequest,

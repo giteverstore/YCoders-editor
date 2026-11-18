@@ -13,7 +13,7 @@ describe('publication workflow policy', () => {
   it.each(['SUPER_ADMIN', 'CONTENT_ADMIN'])('enables clean cloud drafts for %s', role => expect(publicationEntryState(role, 'cloud', 2, false)).toMatchObject({ visible: true, enabled: true }))
   it.each(['CONTENT_EDITOR', 'CONTENT_REVIEWER'])('does not expose publish for %s', role => expect(publicationEntryState(role, 'cloud', 2, false)).toMatchObject({ visible: false, enabled: false }))
   it('blocks local and dirty cloud drafts', () => { expect(publicationEntryState('SUPER_ADMIN', 'local', 1, false).enabled).toBe(false); expect(publicationEntryState('CONTENT_ADMIN', 'cloud', 1, true).enabled).toBe(false) })
-  it('exposes only contract-valid lifecycle controls and makes archive terminal', () => { expect(lifecycleOperations('published')).toEqual(['rollback', 'unpublish', 'disable', 'archive']); expect(lifecycleOperations('unpublished')).toContain('republish'); expect(lifecycleOperations('disabled')).toEqual(['rollback', 'enable', 'archive']); expect(lifecycleOperations('archived')).toEqual([]) })
+  it('exposes release only for published/private and makes archive terminal', () => { expect(lifecycleOperations('published', 'private')).toEqual(['release', 'rollback', 'unpublish', 'disable', 'archive']); expect(lifecycleOperations('published', 'public')).not.toContain('release'); expect(lifecycleOperations('unpublished')).toContain('republish'); expect(lifecycleOperations('disabled')).toEqual(['rollback', 'enable', 'archive']); expect(lifecycleOperations('archived')).toEqual([]) })
 })
 
 describe('PublicationApiClient', () => {
@@ -57,6 +57,6 @@ describe('PublicationApiClient', () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { contentId: preparation().contentId, operation: 'rollback', priorState: 'published', state: 'published', visibility: 'private', activeVersionNumber: 1, latestVersionNumber: 2, pointerRevision: 5, targetVersion: 1, occurredAt: '2026-11-16T10:00:00.000Z', replayed: false } }), { status: 200 }))
     const client = new PublicationApiClient(async () => 'token', '/api', request), pointer = { contentId: preparation().contentId, contentType: 'course' as const, state: 'published', visibility: 'private', activeVersionNumber: 2, latestVersionNumber: 2, revision: 4, updatedAt: '2026-11-16T09:00:00.000Z', updatedBy: 'admin' }
     await client.lifecycle(pointer.contentId, pointer, 'admin-1', 'rollback', '30000000-0000-4000-8000-000000000009', 1, false)
-    const body = JSON.parse(String(request.mock.calls[0][1]!.body)); expect(body).toMatchObject({ expectedPointerRevision: 4, targetVersion: 1, requestId: '30000000-0000-4000-8000-000000000009', confirmation: { actorUid: 'admin-1', operation: 'rollback', currentState: 'published', currentActiveVersion: 2 } })
+    const body = JSON.parse(String(request.mock.calls[0][1]!.body)); expect(body).toMatchObject({ expectedPointerRevision: 4, targetVersion: 1, requestId: '30000000-0000-4000-8000-000000000009', confirmation: { actorUid: 'admin-1', operation: 'rollback', currentState: 'published', currentVisibility: 'private', currentActiveVersion: 2 } })
   })
 })

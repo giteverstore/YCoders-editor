@@ -84,6 +84,10 @@ External HTTPS image blocks remain editing-valid, but are publication-blocking. 
 
 ## Lifecycle, visibility and retrieval
 
+Publishing and learner release are deliberately separate. The initial publication creates an immutable READY version and a `published/private` pointer. The explicit `release` lifecycle operation validates the active READY version and atomically changes only that pointer to `published/public`; active/latest version numbers, artifacts, manifests, assets, hashes, and the source draft remain unchanged. The operation is revision-bound, idempotent, audited, and available only to `SUPER_ADMIN` and `CONTENT_ADMIN`.
+
+After release, `unpublish` changes `published/public` to `unpublished/hidden`, and `republish` restores `published/public`. `disable` applies an operational `disabled/hidden` state and `enable` restores `published/public`. `archive` remains terminal and hidden. Active learner discovery continues to require exactly `published/public`; private publications are never treated as discoverable.
+
 | Operation | From | To | Active version | Discovery | Pinned historical retrieval |
 |---|---|---|---|---|---|
 | First publish | Draft | Published | new v1 | According to visibility | Yes |

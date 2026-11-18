@@ -36,6 +36,7 @@ describe('consolidated V2 Admin router', () => {
     ['/api/v2/publications/course-1', 'publication', ['course-1']],
     ['/api/v2/publications/course-1/prepare', 'publication', ['course-1', 'prepare']],
     ['/api/v2/publications/course-1/publish', 'publication', ['course-1', 'publish']],
+    ['/api/v2/publications/course-1/release', 'publication', ['course-1', 'release']],
     ['/api/v2/publications/course-1/rollback', 'publication', ['course-1', 'rollback']],
     ['/api/v2/publications/course-1/unpublish', 'publication', ['course-1', 'unpublish']],
     ['/api/v2/publications/course-1/republish', 'publication', ['course-1', 'republish']],
@@ -76,6 +77,7 @@ describe('consolidated V2 Admin router', () => {
   it.each([
     ['publications/course-1/prepare', 'publication', ['course-1', 'prepare']],
     ['publications/course-1/publish', 'publication', ['course-1', 'publish']],
+    ['publications/course-1/release', 'publication', ['course-1', 'release']],
     ['publications/course-1/versions', 'publication', ['course-1', 'versions']],
     ['publications/course-1/versions/7', 'publication', ['course-1', 'versions', '7']],
     ['publications/course-1/versions/7/integrity', 'publication', ['course-1', 'integrity', '7']],

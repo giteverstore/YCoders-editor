@@ -6,7 +6,7 @@ type Envelope<T> = { ok: true; data: T } | { ok: false; error: { code: string; m
 export type PublicationPointer = { contentId: string; contentType: ContentType; state: string; visibility: string; activeVersionNumber: number | null; latestVersionNumber: number; revision: number; updatedAt: string; updatedBy: string }
 export type PublicationVersionSummary = { identity: { namespace: 'v2'; contentType: ContentType; contentId: string; publicationVersion: number }; publicationVersion: number; publishedAt: string; publishedBy: string; sourceDraftRevision: number; sourceDocumentVersion: number; documentHash: string; assetManifestHash: string; assetCount: number; active: boolean; artifactStatus: string; compatibilitySummary: { schemaValid: boolean; storageReady: boolean; learnerRuntimeCompatible: boolean; learnerIntegrationReady: boolean; findingCount: number } }
 export type PublicationVersionDetail = PublicationVersionSummary & { schemaVersion: string; artifactHash: string; compatibilitySnapshot: unknown }
-export type LifecycleOperation = 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'
+export type LifecycleOperation = 'release' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'
 export type LifecycleResult = { contentId: string; operation: LifecycleOperation; priorState: string; state: string; visibility: string; activeVersionNumber: number | null; latestVersionNumber: number; pointerRevision: number; targetVersion: number | null; occurredAt: string; replayed: boolean }
 export type PublicationPreparation = {
   title: string; contentId: string; contentType: ContentType; actorUid: string; draftRevision: number; documentVersion: number
@@ -39,7 +39,7 @@ export class PublicationApiClient {
   }
   lifecycle(id: string, pointer: PublicationPointer, actorUid: string, operation: LifecycleOperation, requestId: string, targetVersion: number | null, archiveConfirmed: boolean) {
     const now = new Date(), confirmation = { contentId: id, contentType: pointer.contentType, actorUid, operation, expectedPointerRevision: pointer.revision,
-      currentState: pointer.state, currentActiveVersion: pointer.activeVersionNumber, targetVersion, issuedAt: now.toISOString(), expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(), confirmed: true, archiveConfirmed }
+      currentState: pointer.state, currentVisibility: pointer.visibility, currentActiveVersion: pointer.activeVersionNumber, targetVersion, issuedAt: now.toISOString(), expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(), confirmed: true, archiveConfirmed }
     return this.call<LifecycleResult>(`/${encodeURIComponent(id)}/${operation}`, { method: 'POST', body: JSON.stringify({ expectedPointerRevision: pointer.revision, targetVersion, requestId, confirmation }) })
   }
   private async call<T>(path: string, init: RequestInit, refreshed = false): Promise<T> {

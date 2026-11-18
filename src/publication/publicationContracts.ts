@@ -18,9 +18,9 @@ export type PublicationIdentity = z.infer<typeof publicationIdentitySchema>
 export const publicationStateSchema = z.enum(['draft', 'published', 'unpublished', 'disabled', 'archived'])
 export const publishedVisibilitySchema = z.enum(['private', 'public', 'unlisted', 'hidden'])
 export const contentHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/)
-export const publicationPermissionSchema = z.enum(['publication:read', 'publication:publish', 'publication:rollback', 'publication:unpublish', 'publication:disable', 'publication:enable', 'publication:archive'])
+export const publicationPermissionSchema = z.enum(['publication:read', 'publication:publish', 'publication:release', 'publication:rollback', 'publication:unpublish', 'publication:disable', 'publication:enable', 'publication:archive'])
 export type PublicationPermission = z.infer<typeof publicationPermissionSchema>
-const mutationPermissions: PublicationPermission[] = ['publication:read', 'publication:publish', 'publication:rollback', 'publication:unpublish', 'publication:disable', 'publication:enable', 'publication:archive']
+const mutationPermissions: PublicationPermission[] = ['publication:read', 'publication:publish', 'publication:release', 'publication:rollback', 'publication:unpublish', 'publication:disable', 'publication:enable', 'publication:archive']
 export const publicationPermissions: Readonly<Record<AdminRole, ReadonlySet<PublicationPermission>>> = {
   SUPER_ADMIN: new Set(mutationPermissions), CONTENT_ADMIN: new Set(mutationPermissions), CONTENT_EDITOR: new Set(['publication:read']), CONTENT_REVIEWER: new Set(['publication:read']),
 }
@@ -47,12 +47,12 @@ export const publicationPointerSchema = z.object({ contractVersion: z.literal(PU
   if (value.state !== 'draft' && value.latestVersionNumber === 0) context.addIssue({ code: 'custom', path: ['latestVersionNumber'], message: 'Publication history is required outside draft state' })
 })
 
-export const transitionSchema = z.enum(['publish', 'publish-new-version', 'unpublish', 'republish', 'disable', 'enable', 'archive', 'rollback'])
+export const transitionSchema = z.enum(['publish', 'publish-new-version', 'release', 'unpublish', 'republish', 'disable', 'enable', 'archive', 'rollback'])
 export type PublicationState = z.infer<typeof publicationStateSchema>
 export type PublicationTransition = z.infer<typeof transitionSchema>
-const transitions: Readonly<Record<PublicationTransition, ReadonlySet<PublicationState>>> = { publish: new Set(['draft']), 'publish-new-version': new Set(['published']), unpublish: new Set(['published']), republish: new Set(['unpublished']), disable: new Set(['published', 'unpublished']), enable: new Set(['disabled']), archive: new Set(['draft', 'published', 'unpublished', 'disabled']), rollback: new Set(['published', 'unpublished', 'disabled']) }
+const transitions: Readonly<Record<PublicationTransition, ReadonlySet<PublicationState>>> = { publish: new Set(['draft']), 'publish-new-version': new Set(['published']), release: new Set(['published']), unpublish: new Set(['published']), republish: new Set(['unpublished']), disable: new Set(['published', 'unpublished']), enable: new Set(['disabled']), archive: new Set(['draft', 'published', 'unpublished', 'disabled']), rollback: new Set(['published', 'unpublished', 'disabled']) }
 export const canTransition = (from: PublicationState, action: PublicationTransition) => transitions[action].has(from)
-export function nextState(from: PublicationState, action: PublicationTransition): PublicationState { if (!canTransition(from, action)) throw new Error(`Transition ${action} is not allowed from ${from}`); if (['publish', 'publish-new-version', 'republish', 'enable', 'rollback'].includes(action)) return 'published'; if (action === 'unpublish') return 'unpublished'; if (action === 'disable') return 'disabled'; return 'archived' }
+export function nextState(from: PublicationState, action: PublicationTransition): PublicationState { if (!canTransition(from, action)) throw new Error(`Transition ${action} is not allowed from ${from}`); if (['publish', 'publish-new-version', 'release', 'republish', 'enable', 'rollback'].includes(action)) return 'published'; if (action === 'unpublish') return 'unpublished'; if (action === 'disable') return 'disabled'; return 'archived' }
 export const canPublish = (role: AdminRole, permission: PublicationPermission) => publicationPermissions[role].has(permission)
 export function nextVersionNumber(latest: number) { if (!Number.isSafeInteger(latest) || latest < 0 || latest >= Number.MAX_SAFE_INTEGER) throw new Error('Latest version must allow a safe next integer'); return latest + 1 }
 
@@ -66,10 +66,10 @@ type IdempotencyRecord = z.infer<typeof idempotencyRecordSchema>
 export function evaluateIdempotency(existing: IdempotencyRecord | null, input: Pick<IdempotencyRecord, 'requestId' | 'actorUid' | 'contentId' | 'operation' | 'payloadHash'>): IdempotencyDecision { if (!existing) return 'execute'; const same = existing.requestId === input.requestId && existing.actorUid === input.actorUid && existing.contentId === input.contentId && existing.operation === input.operation && existing.payloadHash === input.payloadHash; if (!same) return 'reject-payload-mismatch'; return existing.status === 'committed' ? 'return-original' : 'reject-in-progress' }
 
 export const publishConfirmationSchema = z.object({ contentId: uuidSchema, contentType: contentTypeSchema, draftRevision: z.number().int().positive(), documentVersion: z.number().int().positive(), draftFingerprint: contentHashSchema, validationFingerprint: contentHashSchema, pointerRevision: z.number().int().nonnegative(), proposedVersionNumber: z.number().int().positive(), assetManifestHash: contentHashSchema, assetIds: z.array(uuidSchema), actorUid: z.string().min(1).max(128), operation: transitionSchema, issuedAt: isoDateTimeSchema, expiresAt: isoDateTimeSchema, completedSteps: z.tuple([z.literal(true), z.literal(true), z.literal(true)]) }).strict()
-export const lifecycleOperationSchema = z.enum(['rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'])
+export const lifecycleOperationSchema = z.enum(['release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'])
 export type LifecycleOperation = z.infer<typeof lifecycleOperationSchema>
 export const lifecycleConfirmationSchema = z.object({ contentId: uuidSchema, contentType: contentTypeSchema, actorUid: z.string().min(1).max(128), operation: lifecycleOperationSchema,
-  expectedPointerRevision: z.number().int().nonnegative(), currentState: publicationStateSchema, currentActiveVersion: z.number().int().positive().nullable(),
+  expectedPointerRevision: z.number().int().nonnegative(), currentState: publicationStateSchema, currentVisibility: publishedVisibilitySchema, currentActiveVersion: z.number().int().positive().nullable(),
   targetVersion: z.number().int().positive().nullable(), issuedAt: isoDateTimeSchema, expiresAt: isoDateTimeSchema, confirmed: z.literal(true), archiveConfirmed: z.boolean() }).strict().superRefine((value, context) => {
   if (value.operation === 'rollback' && value.targetVersion === null) context.addIssue({ code: 'custom', path: ['targetVersion'], message: 'Rollback requires a target version' })
   if (value.operation !== 'rollback' && value.targetVersion !== null) context.addIssue({ code: 'custom', path: ['targetVersion'], message: 'Only rollback accepts a target version' })

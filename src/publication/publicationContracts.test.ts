@@ -27,7 +27,8 @@ describe('final publication contracts', () => {
     expect(assetManifestEntrySchema.safeParse({ ...base, publishedObjectPath: `editor-v2-published-assets/sha256/${'c'.repeat(64)}.png` }).success).toBe(false)
   })
   it('freezes lifecycle transitions and terminal archive', () => {
-    expect(canTransition('draft', 'publish')).toBe(true); expect(canTransition('draft', 'rollback')).toBe(false); expect(canTransition('archived', 'publish')).toBe(false)
+    expect(canTransition('draft', 'publish')).toBe(true); expect(canTransition('published', 'release')).toBe(true); expect(nextState('published', 'release')).toBe('published'); expect(canTransition('draft', 'rollback')).toBe(false); expect(canTransition('archived', 'publish')).toBe(false)
+    for (const state of ['draft', 'unpublished', 'disabled', 'archived'] as const) expect(canTransition(state, 'release')).toBe(false)
     expect(() => nextState('archived', 'enable')).toThrow(); expect(nextState('disabled', 'rollback')).toBe('published')
   })
   it('limits mutations to SUPER_ADMIN and CONTENT_ADMIN', () => {
