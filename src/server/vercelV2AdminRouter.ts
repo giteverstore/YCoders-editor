@@ -27,7 +27,7 @@ export async function runV2AdminRouter(
   response: VercelResponse,
   handlers: AdminRouterHandlers = defaultHandlers,
 ): Promise<void> {
-  const segments = pathSegments(request)
+  const segments = canonicalAdminSegments(request)
   if (!segments || segments[0] !== 'api' || segments[1] !== 'v2') return notFound(response)
   const path = segments.slice(2)
 
@@ -58,6 +58,30 @@ export async function runV2AdminRouter(
   }
 
   return notFound(response)
+}
+
+function canonicalAdminSegments(request: VercelRequest): string[] | undefined {
+  const segments = pathSegments(request)
+  if (segments?.[0] !== 'api' || segments[1] !== 'internal-v2-admin') return segments
+  const adminPath = queryValue(request, 'adminPath')
+  if (!adminPath) return undefined
+  try {
+    const publicSegments = adminPath.split('/').filter(Boolean).map(decodeURIComponent)
+    const query = { ...request.query }
+    delete query.adminPath
+    request.query = query
+    const search = new URLSearchParams()
+    for (const [name, value] of Object.entries(query)) for (const item of Array.isArray(value) ? value : [value]) if (item != null) search.append(name, String(item))
+    request.url = `/api/v2/${publicSegments.map(encodeURIComponent).join('/')}${search.size ? `?${search}` : ''}`
+    return ['api', 'v2', ...publicSegments]
+  } catch {
+    return undefined
+  }
+}
+
+function queryValue(request: VercelRequest, name: string): string | undefined {
+  const value = request.query[name]
+  return Array.isArray(value) ? value[0] : value
 }
 
 function runDelivery(request: VercelRequest, response: VercelResponse, handlers: AdminRouterHandlers, kind: 'active' | 'version' | 'asset', contentId: string, version?: string, assetId?: string) {

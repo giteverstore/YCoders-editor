@@ -5,7 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import v2AdminHandler from '../../api/v2/[...path]'
+import v2AdminHandler from '../../api/internal-v2-admin/[...path]'
 import { createCourseDocument, updateCourse } from '../editor/core/courseEditor.commands'
 import { createPracticeDocument, updatePractice } from '../editor/core/practiceEditor.commands'
 import { createChallengeDocument, changeChallenge } from '../editor/core/challengeEditor'

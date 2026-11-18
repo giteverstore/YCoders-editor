@@ -73,6 +73,38 @@ describe('consolidated V2 Admin router', () => {
     expect(Object.values(handlers).every((handler) => handler.mock.calls.length === 0)).toBe(true)
   })
 
+  it.each([
+    ['publications/course-1/prepare', 'publication', ['course-1', 'prepare']],
+    ['publications/course-1/publish', 'publication', ['course-1', 'publish']],
+    ['publications/course-1/versions', 'publication', ['course-1', 'versions']],
+    ['publications/course-1/versions/7', 'publication', ['course-1', 'versions', '7']],
+    ['publications/course-1/versions/7/integrity', 'publication', ['course-1', 'integrity', '7']],
+    ['publications/course-1/rollback', 'publication', ['course-1', 'rollback']],
+    ['publications/course-1/unpublish', 'publication', ['course-1', 'unpublish']],
+    ['publications/course-1/republish', 'publication', ['course-1', 'republish']],
+    ['publications/course-1/disable', 'publication', ['course-1', 'disable']],
+    ['publications/course-1/enable', 'publication', ['course-1', 'enable']],
+    ['publications/course-1/archive', 'publication', ['course-1', 'archive']],
+    ['drafts/course-1', 'draft', ['course-1']],
+    ['assets/preview/asset-1', 'asset', ['asset-1', 'preview']],
+  ] as const)('canonicalizes internal Admin rewrite %s', async (adminPath, target, expected) => {
+    const handlers = adminHandlers(), req = request(`/api/internal-v2-admin/dispatch?adminPath=${adminPath}`)
+    req.query = { adminPath, cursor: 'next' }
+    await runV2AdminRouter(req, response().value, handlers)
+    expect(req.url).toBe(`/api/v2/${adminPath}?cursor=next`)
+    expect(req.query).toEqual({ cursor: 'next' })
+    expect(handlers[target]).toHaveBeenCalledOnce()
+    expect(handlers[target].mock.calls[0]?.slice(2)).toEqual(expected)
+  })
+
+  it('never dispatches a gateway path through the internal Admin function', async () => {
+    const handlers = adminHandlers(), res = response(), req = request('/api/internal-v2-admin/dispatch?adminPath=gateway/courses/course-1')
+    req.query = { adminPath: 'gateway/courses/course-1' }
+    await runV2AdminRouter(req, res.value, handlers)
+    expect(res.result.status).toBe(404)
+    expect(Object.values(handlers).every((handler) => handler.mock.calls.length === 0)).toBe(true)
+  })
+
   it('returns a sanitized 404 for unknown and malformed routes', async () => {
     for (const url of ['/api/v2/unknown', '/api/v2/drafts/one/extra', '/api/v2/drafts/%']) {
       const res = response()

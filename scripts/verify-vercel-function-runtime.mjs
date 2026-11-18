@@ -13,9 +13,15 @@ if (functionDirectories.length !== 2) {
 if (!outputConfig.routes.some((route) => route.src?.includes('/api/v2/gateway') && route.dest?.startsWith('/api/internal-v2-gateway/dispatch?gatewayPath=$1'))) {
   throw new Error('Generated Vercel routes do not dispatch the public gateway path to the isolated gateway function')
 }
+if (!outputConfig.routes.some((route) => route.src?.includes('/api/v2') && !route.src?.includes('/gateway') && route.dest?.startsWith('/api/internal-v2-admin/dispatch?adminPath=$1'))) {
+  throw new Error('Generated Vercel routes do not dispatch public Admin paths to the consolidated Admin function')
+}
+const gatewayIndex = outputConfig.routes.findIndex((route) => route.dest?.startsWith('/api/internal-v2-gateway/dispatch?gatewayPath=$1'))
+const adminIndex = outputConfig.routes.findIndex((route) => route.dest?.startsWith('/api/internal-v2-admin/dispatch?adminPath=$1'))
+if (gatewayIndex < 0 || adminIndex < 0 || gatewayIndex >= adminIndex) throw new Error('Gateway rewrite must precede the general Admin rewrite')
 
 const expectedEntrypoints = [
-  ['api/v2/[...path].func', 'api/v2/[...path].js'],
+  ['api/internal-v2-admin/[...path].func', 'api/internal-v2-admin/[...path].js'],
   ['api/internal-v2-gateway/[...path].func', 'api/internal-v2-gateway/[...path].js'],
 ]
 
