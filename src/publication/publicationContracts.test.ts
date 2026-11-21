@@ -62,13 +62,14 @@ describe('final publication contracts', () => {
     expect(result.schemaValid).toBe(true); expect(result.storageReady).toBe(false); expect(result.findings.some(({ code }) => code === 'assets.external-image-unresolved')).toBe(true)
   })
   it('distinguishes V2 Practice validity from learner compatibility', () => {
-    expect(validatePublicationCompatibility(validPracticeDocument).findings.some(({ code }) => code === 'practice.comparison-not-supported')).toBe(false)
+    expect(validatePublicationCompatibility(validPracticeDocument).findings.some(({ code }) => code.startsWith('practice.'))).toBe(false)
     const future = structuredClone(validPracticeDocument) as ContentDocument
     if (future.contentType !== 'practice') throw new Error('Expected Practice fixture')
-    future.content.verification = { strategy: 'json-equivalent', caseSensitive: false, numericTolerance: 0.01 }
+    delete future.content.execution
+    delete future.content.executablePublicTests
     const result = validatePublicationCompatibility(future as ContentDocument)
-    expect(result.schemaValid).toBe(true); expect(result.learnerRuntimeCompatible).toBe(false)
-    expect(result.findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['practice.comparison-not-supported', 'practice.case-policy-not-supported', 'practice.numeric-tolerance-not-supported']))
+    expect(result.schemaValid).toBe(true); expect(result.learnerRuntimeCompatible).toBe(false); expect(result.storageReady).toBe(false)
+    expect(result.findings.map(({ code }) => code)).toContain('practice.execution-contract-missing')
   })
   it('reports Challenge and Project compatibility gaps', () => {
     expect(validatePublicationCompatibility(validChallengeDocument).findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['challenge.reward-incompatible', 'challenge.streak-contract-missing']))
