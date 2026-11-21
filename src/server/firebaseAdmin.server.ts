@@ -11,6 +11,7 @@ import { FirebaseAssetRepository } from './assetRepository.js'
 import { PublicationBackend } from './publicationBackend.js'
 import { CourseDeliveryService } from './courseDelivery.js'
 import { createFirebaseBackendWifAuthClient, createFirebaseBackendWifCredential, resolveFirebaseBackendWifConfig } from './firebaseBackendCredential.js'
+import { PracticeDeliveryService } from './practiceDelivery.js'
 
 export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
   const production = environment.VERCEL_ENV === 'production'
@@ -63,4 +64,10 @@ export function getCourseDeliveryServerDependencies() {
   const publication = getPublicationServerDependencies()
   const resources = firebaseResources()
   return { verifier: publication.verifier, service: new CourseDeliveryService(resources.firestore, resources.bucket) }
+}
+
+export function getPracticeDeliveryServerDependencies() {
+  const publication = getPublicationServerDependencies()
+  const resources = firebaseResources()
+  return { verifier: publication.verifier, service: new PracticeDeliveryService(resources.firestore, resources.bucket) }
 }

@@ -1,6 +1,7 @@
 import { contentEnvelopeSchema, type ChallengeDocument, type CourseDocument, type PracticeDocument, type ProjectDocument } from '../content/core/envelope.js'
 import type { ContentBlock } from '../content/blocks/block.schemas.js'
 import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
+import { practiceArgumentTypeSchema, practiceExecutionModeSchema, practiceLanguageIdSchema, practiceResultTypeSchema, practiceSemanticValidatorIdSchema } from '../content/domains/practice/practice.execution.js'
 
 const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table'])
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })
@@ -43,17 +44,40 @@ export function adaptCourse(source: AdapterSource<CourseDocument>): AdapterResul
 }
 
 export function adaptPractice(source: AdapterSource<PracticeDocument>): AdapterResult<LearnerPractice> {
-  const learnerIdentity = identity(source); if (Array.isArray(learnerIdentity)) return fail(learnerIdentity, 'invalid-publication')
-  const raw = source.document.content.verification as { strategy: string; caseSensitive: boolean; numericTolerance?: number }
-  const errors: AdapterFinding[] = []
-  if (raw.strategy === 'json-equivalent') errors.push(finding('practice', 'practice.json-equivalent-unsupported', '$.content.verification.strategy', 'JSON-equivalent comparison is unsupported by the current learner runtime.', 'Upgrade both learner and trusted verification services.'))
-  if (raw.numericTolerance !== undefined) errors.push(finding('practice', 'practice.numeric-tolerance-unsupported', '$.content.verification.numericTolerance', 'Numeric tolerance cannot be preserved.', 'Add identical tolerance semantics to learner and trusted verification.'))
-  if (!raw.caseSensitive) errors.push(finding('practice', 'practice.case-policy-unsupported', '$.content.verification.caseSensitive', 'Independent case policy cannot be preserved.', 'Add explicit case-policy support to learner verification.'))
-  if (raw.strategy !== 'json-equivalent' && !['exact', 'trimmed', 'normalized-lines'].includes(raw.strategy)) errors.push(finding('practice', 'practice.comparator-unsupported', '$.content.verification.strategy', `Comparator ${raw.strategy} is unsupported.`, 'Use a confirmed comparator or upgrade the learner.'))
+  const contractErrors = practiceContractErrors(source.document as unknown as Record<string, unknown>); if (contractErrors.length) return fail(contractErrors, 'requires-learner-upgrade')
+  const invalid = validateCurrent(source), learnerIdentity = identity(source); if (invalid.length || Array.isArray(learnerIdentity)) return fail([...invalid, ...(Array.isArray(learnerIdentity) ? learnerIdentity : [])], 'invalid-publication')
+  const errors: AdapterFinding[] = [], content = source.document.content
+  if (!content.execution || !content.executablePublicTests) errors.push(finding('practice', 'practice.execution-contract-missing', '$.content.execution', 'Legacy Practice content has no unambiguous executable contract.', 'Explicitly migrate the document before learner delivery.'))
   const blocks = adaptBlocks(source, source.document.content.instructions, '$.content.instructions'); errors.push(...blocks.errors)
   if (errors.length) return fail(errors, 'requires-learner-upgrade')
-  const warnings = raw.strategy === 'normalized-lines' ? [finding('practice', 'practice.normalized-lines-schema-gap', '$.content.verification.strategy', 'The learner supports normalized-lines, but the current V2 schema cannot author it.', 'Add normalized-lines to the V2 comparator enum.', 'warning')] : []
-  return { ok: true, value: { identity: learnerIdentity, questionId: source.document.id, title: source.document.title, difficulty: source.document.content.difficulty, languages: structuredClone(source.document.content.languages), starterCode: structuredClone(source.document.content.starterCode), referenceSolutions: structuredClone(source.document.content.referenceSolutions), examples: structuredClone(source.document.content.examples), hints: structuredClone(source.document.content.hints), instructions: blocks.blocks, verification: { comparator: raw.strategy as 'exact' | 'trimmed' | 'normalized-lines', caseSensitive: true }, trustedVerificationRequired: true }, warnings, classification: warnings.length ? 'requires-v2-schema-change' : 'compatible' }
+  const difficulty = ({ beginner: 'easy', intermediate: 'medium', advanced: 'hard' } as const)[content.difficulty]
+  const assets = blocks.blocks.flatMap((block) => block.type === 'image' && typeof block.data === 'object' && block.data && 'delivery' in block.data ? [(block.data as { delivery: AssetDeliveryDescriptor }).delivery] : [])
+  const value: LearnerPractice = { identity: learnerIdentity as LearnerIdentity, questionId: source.document.id, title: source.document.title, summary: source.document.metadata.summary ?? '', difficulty, topics: [...content.questionMetadata.topics], tags: [...source.document.metadata.tags], estimatedMinutes: content.questionMetadata.estimatedMinutes, languages: structuredClone(content.languages), starterCode: structuredClone(content.starterCode), examples: structuredClone(content.examples), constraints: [...content.constraints], hints: structuredClone(content.hints), instructions: blocks.blocks, execution: structuredClone(content.execution!), publicTests: structuredClone(content.executablePublicTests!), executionAssurance: 'browser-public-tests', runSemantics: 'execute-and-evaluate-all-public-tests', assets }
+  if (JSON.stringify(value).includes('referenceSolutions')) return fail([finding('practice', 'practice.dto-safety-violation', '$', 'Trusted solution material entered the learner DTO.', 'Reject the unsafe adapter result.')], 'invalid-publication')
+  return success(value)
+}
+
+function practiceContractErrors(document: Record<string, unknown>): AdapterFinding[] {
+  const content = document.content as Record<string, unknown> | undefined, errors: AdapterFinding[] = []
+  const languages = ((content?.languages as { supported?: Array<{ id?: unknown }> } | undefined)?.supported ?? [])
+  languages.forEach((language, index) => { if (!practiceLanguageIdSchema.safeParse(language.id).success) errors.push(finding('practice', 'practice.language-unsupported', `$.content.languages.supported[${index}].id`, `Practice language ${String(language.id)} is unsupported.`, 'Use one of the closed V2 Practice language IDs.')) })
+  const execution = content?.execution as Record<string, unknown> | undefined
+  if (execution && !practiceExecutionModeSchema.safeParse(execution.mode).success) errors.push(finding('practice', 'practice.execution-mode-unsupported', '$.content.execution.mode', `Practice execution mode ${String(execution.mode)} is unsupported.`, 'Use stdout, function, or stateful execution.'))
+  const argumentSpecs = [...((execution?.arguments as Array<Record<string, unknown>> | undefined) ?? []), ...((execution?.constructorArguments as Array<Record<string, unknown>> | undefined) ?? [])]
+  argumentSpecs.forEach((argument, index) => { if (!practiceArgumentTypeSchema.safeParse(argument.type).success) errors.push(finding('practice', 'practice.argument-type-unsupported', `$.content.execution.arguments[${index}].type`, `Practice argument type ${String(argument.type)} is unsupported.`, 'Use an inventoried portable argument type.')) })
+  const result = execution?.result as Record<string, unknown> | undefined
+  if (result && !practiceResultTypeSchema.safeParse(result.type).success) errors.push(finding('practice', 'practice.return-type-unsupported', '$.content.execution.result.type', `Practice result type ${String(result.type)} is unsupported.`, 'Use an inventoried portable result type.'))
+  const tests = (content?.executablePublicTests as Array<Record<string, unknown>> | undefined) ?? []
+  tests.forEach((test, index) => {
+    const comparison = test.comparison as Record<string, unknown> | undefined, kind = comparison?.kind
+    if (!['exact-text', 'trimmed-text', 'json-equivalent', 'numeric-tolerance', 'semantic'].includes(String(kind))) errors.push(finding('practice', 'practice.comparator-unsupported', `$.content.executablePublicTests[${index}].comparison.kind`, `Practice comparator ${String(kind)} is unsupported.`, 'Use a closed V2 comparator.'))
+    else if (kind === 'numeric-tolerance' && !(typeof comparison?.tolerance === 'number' && Number.isFinite(comparison.tolerance) && comparison.tolerance > 0)) errors.push(finding('practice', 'practice.comparator-config-invalid', `$.content.executablePublicTests[${index}].comparison.tolerance`, 'Numeric tolerance must be finite and positive.', 'Provide an explicit positive tolerance.'))
+    else if (kind === 'semantic' && !practiceSemanticValidatorIdSchema.safeParse(comparison?.validatorId).success) errors.push(finding('practice', 'practice.semantic-validator-unsupported', `$.content.executablePublicTests[${index}].comparison.validatorId`, `Practice semantic validator ${String(comparison?.validatorId)} is unsupported.`, 'Use a registered declarative validator ID.'))
+    for (const [argumentIndex, argument] of ((test.arguments as Array<Record<string, unknown>> | undefined) ?? []).entries()) if (!practiceArgumentTypeSchema.safeParse(argument.type).success) errors.push(finding('practice', 'practice.argument-type-unsupported', `$.content.executablePublicTests[${index}].arguments[${argumentIndex}].type`, `Practice argument type ${String(argument.type)} is unsupported.`, 'Use an inventoried portable argument type.'))
+    const expected = test.expectedResult as Record<string, unknown> | undefined
+    if (expected && !practiceResultTypeSchema.safeParse(expected.type).success) errors.push(finding('practice', 'practice.return-type-unsupported', `$.content.executablePublicTests[${index}].expectedResult.type`, `Practice result type ${String(expected.type)} is unsupported.`, 'Use an inventoried portable result type.'))
+  })
+  return errors
 }
 
 export function adaptChallenge(source: AdapterSource<ChallengeDocument>): AdapterResult<LearnerChallenge> {
