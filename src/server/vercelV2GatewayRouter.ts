@@ -2,11 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 import { runGatewayCourseDeliveryHandler } from './vercelGatewayCourseDeliveryHandler.js'
 import { runGatewayPracticeDeliveryHandler } from './vercelGatewayPracticeDeliveryHandler.js'
+import { runGatewayChallengeCandidateHandler } from './vercelGatewayChallengeCandidateHandler.js'
 
 type GatewayHandler = typeof runGatewayCourseDeliveryHandler
-type GatewayHandlers = { courses: GatewayHandler; practice: GatewayHandler }
+type GatewayHandlers = { courses: GatewayHandler; practice: GatewayHandler; challengeCandidates: typeof runGatewayChallengeCandidateHandler }
 
-export async function runV2GatewayRouter(request: VercelRequest, response: VercelResponse, handlers: GatewayHandler | GatewayHandlers = { courses: runGatewayCourseDeliveryHandler, practice: runGatewayPracticeDeliveryHandler }): Promise<void> {
+export async function runV2GatewayRouter(request: VercelRequest, response: VercelResponse, handlers: GatewayHandler | GatewayHandlers = { courses: runGatewayCourseDeliveryHandler, practice: runGatewayPracticeDeliveryHandler, challengeCandidates: runGatewayChallengeCandidateHandler }): Promise<void> {
   let path = pathSegments(request)
   const publicRoute = path?.[0] === 'api' && path[1] === 'v2' && path[2] === 'gateway'
   const internalRoute = path?.[0] === 'api' && path[1] === 'internal-v2-gateway'
@@ -17,6 +18,7 @@ export async function runV2GatewayRouter(request: VercelRequest, response: Verce
     request.url = `/api/v2/gateway/${gatewayPath}`
   }
   const offset = publicRoute ? 3 : internalRoute ? 2 : -1
+  if (path && offset >= 0 && path.length === offset + 1 && path[offset] === 'challenge-candidates' && typeof handlers !== 'function') return handlers.challengeCandidates(request, response)
   if (!path || offset < 0 || !['courses', 'practice'].includes(path[offset] ?? '') || !path[offset + 1]) return notFound(response)
   const handler = typeof handlers === 'function' ? handlers : handlers[path[offset] as keyof GatewayHandlers]
   if (internalRoute && !gatewayPath) request.url = request.url?.replace(/^\/api\/internal-v2-gateway/, '/api/v2/gateway')
