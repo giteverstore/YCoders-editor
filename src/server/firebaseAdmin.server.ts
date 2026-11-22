@@ -12,6 +12,7 @@ import { PublicationBackend } from './publicationBackend.js'
 import { CourseDeliveryService } from './courseDelivery.js'
 import { createFirebaseBackendWifAuthClient, createFirebaseBackendWifCredential, resolveFirebaseBackendWifConfig } from './firebaseBackendCredential.js'
 import { PracticeDeliveryService } from './practiceDelivery.js'
+import { FirestoreChallengeCandidateSource } from './challengeCandidateService.js'
 
 export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
   const production = environment.VERCEL_ENV === 'production'
@@ -57,8 +58,10 @@ export function getServerDependencies() {
 export function getPublicationServerDependencies() {
   if (!process.env.VERCEL_ENV && !process.env.FIREBASE_STORAGE_EMULATOR_HOST) throw new Error('Non-production publication service requires the Storage emulator')
   const resources = firebaseResources()
-  return { verifier: firebaseTokenVerifier, backend: new PublicationBackend(resources.firestore, resources.bucket) }
+  return { verifier: firebaseTokenVerifier, backend: new PublicationBackend(resources.firestore, resources.bucket, undefined, new FirestoreChallengeCandidateSource(resources.firestore)) }
 }
+
+export function getChallengeCandidateServerDependencies() { const resources = firebaseResources(); return { verifier: firebaseTokenVerifier, source: new FirestoreChallengeCandidateSource(resources.firestore) } }
 
 export function getCourseDeliveryServerDependencies() {
   const publication = getPublicationServerDependencies()

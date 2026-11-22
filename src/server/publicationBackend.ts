@@ -13,6 +13,8 @@ import {
   type PublicationIdentity,
 } from '../publication/publicationContracts.js'
 import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository.js'
+import { isChallengePolicyContent } from '../content/domains/challenges/challenge.schema.js'
+import { validatePolicyCandidates, type ChallengeCandidateSource, type ChallengePolicyEvidence } from './challengeCandidateService.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 export const V2_PUBLICATION_REQUEST_COLLECTION = 'editorV2PublicationRequests'
@@ -27,6 +29,7 @@ export type PublicationPreparation = {
   proposedVersionNumber: number; operation: 'publish' | 'publish-new-version'; resultingVisibility: 'private'
   schemaValid: boolean; storageReady: boolean; learnerRuntimeCompatible: boolean; learnerIntegrationReady: boolean
   findings: ReturnType<typeof validatePublicationCompatibility>['findings']; assetIds: string[]; assetManifestHash: string
+  challengePolicyEvidence?: ChallengePolicyEvidence
   issuedAt: string; expiresAt: string; canPublish: boolean
 }
 
@@ -36,7 +39,7 @@ type RequestRecord = { requestId: string; actorUid: string; contentId: string; o
 type LifecycleRequestRecord = { requestId: string; actorUid: string; contentId: string; operation: string; payloadHash: string; correlationId: string; state: 'COMMITTED'; expectedPointerRevision: number; createdAt: string; updatedAt: string; expiresAt: string; result: LifecycleResult }
 
 export class PublicationBackend {
-  constructor(private readonly firestore: Firestore, private readonly bucket: Bucket, private readonly now = () => new Date()) {}
+  constructor(private readonly firestore: Firestore, private readonly bucket: Bucket, private readonly now = () => new Date(), private readonly challengeCandidates?: ChallengeCandidateSource) {}
 
   async pointer(contentId: string): Promise<Pointer | null> { const snap = await this.pointerRef(contentId).get(); return snap.exists ? snap.data() as Pointer : null }
   async versions(contentId: string): Promise<unknown[]> { const pointer = await this.pointer(contentId), snap = await this.pointerRef(contentId).collection('versions').orderBy('identity.publicationVersion', 'desc').get(); return snap.docs.map((doc) => this.summarizeVersion(doc.data() as Record<string, unknown>, pointer?.activeVersionNumber ?? null)) }
@@ -81,13 +84,13 @@ export class PublicationBackend {
     if (draft.revision !== expectedDraftRevision) throw new PublicationError('DRAFT_CONFLICT', 'Draft revision changed', 409, { currentRevision: draft.revision })
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document), manifest = await this.planAssets(assets)
-    const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })
+    const compatibility = await this.validateCompatibility(document, manifest)
     const pointer = await this.pointer(contentId)
     if (pointer && !canTransition(pointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${pointer.state}`, 409)
     const previous = pointer?.activeVersionNumber ? await this.version(contentId, pointer.activeVersionNumber) : null
     const findings = [...compatibility.findings, ...(previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : [])]
     const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest)
-    const validationHash = await sha256Canonical({ ...compatibility, findings }), issued = this.now()
+    const validationHash = await sha256Canonical(validationFingerprintValue({ ...compatibility, findings })), issued = this.now()
     return { title: document.title, contentId, contentType: document.contentType, actorUid, draftRevision: draft.revision,
       documentVersion: document.documentVersion, draftFingerprint: documentHash, validationFingerprint: validationHash,
       pointerRevision: pointer?.revision ?? 0, currentState: pointer?.state ?? 'draft', currentVisibility: pointer?.visibility ?? 'hidden',
@@ -115,14 +118,14 @@ export class PublicationBackend {
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document)
     const manifest = await this.planAssets(assets)
-    const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })
+    const compatibility = await this.validateCompatibility(document, manifest)
     const previousPointer = await this.pointer(input.contentId)
     if (previousPointer && !canTransition(previousPointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${previousPointer.state}`, 409)
     const previous = previousPointer?.activeVersionNumber ? await this.version(input.contentId, previousPointer.activeVersionNumber) : null
     const stableFindings = previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : []
     const findings = [...compatibility.findings, ...stableFindings]
     if (!compatibility.schemaValid || !compatibility.storageReady || findings.some(({ severity }) => severity === 'error')) throw new PublicationError('PUBLICATION_INVALID', 'Publication validation failed', 422, findings)
-    const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest), validationHash = await sha256Canonical({ ...compatibility, findings })
+    const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest), validationHash = await sha256Canonical(validationFingerprintValue({ ...compatibility, findings }))
     const pointerRevision = previousPointer?.revision ?? 0
     const proposedVersion = (previousPointer?.latestVersionNumber ?? 0) + 1
     this.verifyConfirmation(input.confirmation, { actorUid, document, draftRevision: draft.revision, documentHash, validationHash, manifestHash, assetIds: manifest.map(({ assetId }) => assetId), pointerRevision, proposedVersion, operation: previousPointer ? 'publish-new-version' : 'publish' })
@@ -174,6 +177,18 @@ export class PublicationBackend {
     })
   }
 
+  private async validateCompatibility(document: ContentDocument, manifest: Manifest) {
+    const base = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })
+    if (document.contentType !== 'challenge' || !isChallengePolicyContent(document.content)) return base
+    if (!this.challengeCandidates) throw new PublicationError('challenge-policy.candidate-source-unavailable', 'Authoritative Practice candidate metadata is unavailable', 503)
+    let validation: Awaited<ReturnType<typeof validatePolicyCandidates>>
+    try { validation = await validatePolicyCandidates(document.id, document.content, this.challengeCandidates, this.now().toISOString()) }
+    catch { throw new PublicationError('challenge-policy.candidate-source-unavailable', 'Authoritative Practice candidate metadata is unavailable', 503) }
+    if (validation.code) throw new PublicationError(validation.code, validation.code === 'challenge-policy.fixed-practice-not-found' ? 'The fixed Practice publication was not found' : validation.code === 'challenge-policy.fixed-practice-ineligible' ? 'The fixed Practice publication is not eligible' : 'No eligible Practice publication matches this policy', 422, validation.evidence)
+    const findings = base.findings.filter(({ code }) => code !== 'challenge-policy.candidate-validation-required')
+    return { ...base, storageReady: true, learnerRuntimeCompatible: true, learnerIntegrationReady: true, findings, challengePolicyEvidence: validation.evidence }
+  }
+
   private verifyConfirmation(raw: unknown, expected: { actorUid: string; document: ContentDocument; draftRevision: number; documentHash: string; validationHash: string; manifestHash: string; assetIds: string[]; pointerRevision: number; proposedVersion: number; operation: 'publish' | 'publish-new-version' }) {
     const confirmation = publishConfirmationSchema.parse(raw), now = this.now()
     const ids = [...expected.assetIds].sort(), confirmed = [...confirmation.assetIds].sort()
@@ -193,6 +208,7 @@ export class PublicationBackend {
 }
 
 export const hashBytes = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+function validationFingerprintValue(value: Record<string, unknown>) { const evidence = value.challengePolicyEvidence as ChallengePolicyEvidence | undefined; if (!evidence) return value; const stableEvidence = { eligibleCandidateCount: evidence.eligibleCandidateCount, candidateSnapshotHash: evidence.candidateSnapshotHash, policySourceHash: evidence.policySourceHash }; return { ...value, challengePolicyEvidence: stableEvidence } }
 export const publicationInputSchema = z.object({ expectedDraftRevision: z.number().int().positive(), expectedPointerRevision: z.number().int().nonnegative(), requestId: uuidSchema, confirmation: publishConfirmationSchema }).strict()
 export const publicationPreparationInputSchema = z.object({ expectedDraftRevision: z.number().int().positive() }).strict()
 export const lifecycleInputSchema = z.object({ operation: z.enum(['release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive']), expectedPointerRevision: z.number().int().nonnegative(), targetVersion: z.number().int().positive().nullable().optional(), requestId: uuidSchema, confirmation: lifecycleConfirmationSchema }).strict().superRefine((value, context) => { if (value.operation === 'rollback' && !value.targetVersion) context.addIssue({ code: 'custom', path: ['targetVersion'], message: 'Rollback requires a target version' }); if (value.operation !== 'rollback' && value.targetVersion != null) context.addIssue({ code: 'custom', path: ['targetVersion'], message: 'Target version is rollback-only' }) })

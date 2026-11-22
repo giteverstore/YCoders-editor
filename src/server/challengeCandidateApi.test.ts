@@ -1,0 +1,23 @@
+import { describe, expect, it } from 'vitest'
+import { createChallengeDocument } from '../editor/core/challengeEditor'
+import { isChallengePolicyContent } from '../content/domains/challenges/challenge.schema'
+import { handleChallengeCandidateApi } from './challengeCandidateApi'
+import { validatePolicyCandidates, type AuthoritativePracticeCandidate } from './challengeCandidateService'
+
+const id = 'a0000000-0000-4000-8000-000000000701'
+const candidate = (overrides: Partial<AuthoritativePracticeCandidate> = {}): AuthoritativePracticeCandidate => ({ title: 'Challenge Fixture Practice', namespace: 'v2', contentType: 'practice', contentId: id, activePublicationVersion: 2, state: 'published', discoverable: true, difficulty: 'beginner', topics: ['arrays'], executionCompatible: true, publicTestsValid: true, supportedLanguages: ['python'], learnerDtoReady: true, ...overrides })
+const verifier = (role: unknown = 'CONTENT_ADMIN') => ({ verify: async (token: string) => { if (token === 'bad') throw new Error('bad'); return { uid: 'admin', adminRole: role } } })
+
+describe('Challenge candidate API', () => {
+  it('requires authentication and authoring permission', async () => { const source = { list: async () => [candidate()] }; expect((await handleChallengeCandidateApi({ method: 'GET' }, { verifier: verifier(), source })).status).toBe(401); expect((await handleChallengeCandidateApi({ method: 'GET', authorization: 'Bearer token' }, { verifier: verifier('CONTENT_REVIEWER'), source })).status).toBe(403) })
+  it.each(['CONTENT_EDITOR', 'CONTENT_ADMIN', 'SUPER_ADMIN'])('allows authenticated %s authoring access', async (role) => { const result = await handleChallengeCandidateApi({ method: 'GET', authorization: 'Bearer token' }, { verifier: verifier(role), source: { list: async () => [candidate()] } }); expect(result).toMatchObject({ status: 200, body: { ok: true, data: [expect.objectContaining({ contentId: id, activePublicationVersion: 2 })] } }) })
+  it('fails closed when the authoritative source is unavailable', async () => { const result = await handleChallengeCandidateApi({ method: 'GET', authorization: 'Bearer token' }, { verifier: verifier(), source: { list: async () => { throw new Error('offline') } } }); expect(result).toMatchObject({ status: 503, body: { error: { code: 'challenge-policy.candidate-source-unavailable' } } }) })
+  it('returns only safe projection fields', async () => { const value = candidate(); const result = await handleChallengeCandidateApi({ method: 'GET', authorization: 'Bearer token' }, { verifier: verifier(), source: { list: async () => [value] } }); const serialized = JSON.stringify(result.body); for (const forbidden of ['referenceSolutions', 'starterCode', 'executablePublicTests', 'publishedObjectPath', 'draftRevision', 'serviceAccount']) expect(serialized).not.toContain(forbidden) })
+})
+
+describe('authoritative Challenge policy validation', () => {
+  const policy = () => { const document = createChallengeDocument('2026-11-22T00:00:00.000Z', () => 'a0000000-0000-4000-8000-000000000700'); if (!isChallengePolicyContent(document.content)) throw new Error('policy'); return { id: document.id, content: document.content } }
+  it('matches eligible count and deterministic snapshot for identical inputs', async () => { const document = policy(), source = { list: async () => [candidate()] }; const one = await validatePolicyCandidates(document.id, document.content, source, '2026-11-22T01:00:00.000Z'), two = await validatePolicyCandidates(document.id, document.content, source, '2026-11-22T01:00:00.000Z'); expect(one.evidence).toEqual(two.evidence); expect(one.evidence.eligibleCandidateCount).toBe(1) })
+  it.each([['archived', { state: 'archived' as const }], ['disabled', { state: 'disabled' as const }], ['unpublished', { state: 'unpublished' as const }]])('excludes %s Practice', async (_name, override) => { const document = policy(); expect((await validatePolicyCandidates(document.id, document.content, { list: async () => [candidate(override)] })).code).toBe('challenge-policy.no-eligible-practice') })
+  it('distinguishes missing and ineligible fixed Practice', async () => { const document = policy(); document.content.source.mode = 'fixed-practice'; document.content.source.fixedPracticeContentId = id; expect((await validatePolicyCandidates(document.id, document.content, { list: async () => [] })).code).toBe('challenge-policy.fixed-practice-not-found'); expect((await validatePolicyCandidates(document.id, document.content, { list: async () => [candidate({ state: 'archived' })] })).code).toBe('challenge-policy.fixed-practice-ineligible'); expect((await validatePolicyCandidates(document.id, document.content, { list: async () => [candidate()] })).code).toBeNull() })
+})

@@ -4,12 +4,14 @@ import { runVercelAssetHandler } from './vercelAssetHandler.js'
 import { runCourseDeliveryHandler } from './vercelCourseDeliveryHandler.js'
 import { runVercelDraftHandler } from './vercelDraftHandler.js'
 import { runVercelPublicationHandler } from './vercelPublicationHandler.js'
+import { runVercelChallengeCandidateHandler } from './vercelChallengeCandidateHandler.js'
 
 type AdminRouterHandlers = {
   asset: typeof runVercelAssetHandler
   delivery: typeof runCourseDeliveryHandler
   draft: typeof runVercelDraftHandler
   publication: typeof runVercelPublicationHandler
+  challengeCandidate: typeof runVercelChallengeCandidateHandler
 }
 
 const defaultHandlers: AdminRouterHandlers = {
@@ -17,6 +19,7 @@ const defaultHandlers: AdminRouterHandlers = {
   delivery: runCourseDeliveryHandler,
   draft: runVercelDraftHandler,
   publication: runVercelPublicationHandler,
+  challengeCandidate: runVercelChallengeCandidateHandler,
 }
 
 const publicationActions = new Set(['prepare', 'publish', 'release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'] as const)
@@ -32,6 +35,7 @@ export async function runV2AdminRouter(
   const path = segments.slice(2)
 
   if (path[0] === 'gateway') return notFound(response)
+  if (path.length === 1 && path[0] === 'challenge-candidates') return handlers.challengeCandidate(request, response)
   if (path.length === 1 && path[0] === 'drafts') return handlers.draft(request, response)
   if (path.length === 2 && path[0] === 'drafts') return handlers.draft(request, response, path[1])
   if (path.length === 1 && path[0] === 'assets') return handlers.asset(request, response)

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { adminRoles } from '../auth/permissions'
 import type { ContentDocument } from '../content/core/envelope'
 import { validChallengeDocument, validCourseDocument, validPracticeDocument, validProjectDocument } from '../content/fixtures/validDocuments'
-import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validatePublicationCompatibility } from './publicationContracts'
+import { createChallengeDocument } from '../editor/core/challengeEditor'
+import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validateChallengePolicyPublicationCompatibility, validatePublicationCompatibility } from './publicationContracts'
 
 const hash = (c = 'a') => `sha256:${c.repeat(64)}`
 const uuid = (last: string) => `a0000000-0000-4000-8000-${last.padStart(12, '0')}`
@@ -74,6 +75,16 @@ describe('final publication contracts', () => {
   it('reports Challenge and Project compatibility gaps', () => {
     expect(validatePublicationCompatibility(validChallengeDocument).findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['challenge.reward-incompatible', 'challenge.streak-contract-missing']))
     expect(validatePublicationCompatibility(validProjectDocument).findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['project.runtime-missing', 'project.entrypoint-missing', 'project.validator-id-missing']))
+  })
+  it('exposes strict Challenge policy publication compatibility', () => {
+    const result = validateChallengePolicyPublicationCompatibility({ contentType: 'challenge-policy' })
+    expect(result).toMatchObject({ schemaValid: false, orchestrationReady: false })
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'challenge-policy.invalid' }))
+  })
+  it('blocks policy publication until authoritative candidate validation is integrated', () => {
+    const result = validatePublicationCompatibility(createChallengeDocument())
+    expect(result).toMatchObject({ schemaValid: true, storageReady: false })
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'challenge-policy.candidate-validation-required', severity: 'error' }))
   })
   it('blocks removal of learner-referenced stable IDs', () => {
     const next = structuredClone(validCourseDocument)

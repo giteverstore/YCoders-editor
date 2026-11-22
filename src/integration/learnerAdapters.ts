@@ -2,6 +2,7 @@ import { contentEnvelopeSchema, type ChallengeDocument, type CourseDocument, typ
 import type { ContentBlock } from '../content/blocks/block.schemas.js'
 import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
 import { practiceArgumentTypeSchema, practiceExecutionModeSchema, practiceLanguageIdSchema, practiceResultTypeSchema, practiceSemanticValidatorIdSchema } from '../content/domains/practice/practice.execution.js'
+import { isChallengePolicyContent } from '../content/domains/challenges/challenge.schema.js'
 
 const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table'])
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })
@@ -82,6 +83,7 @@ function practiceContractErrors(document: Record<string, unknown>): AdapterFindi
 
 export function adaptChallenge(source: AdapterSource<ChallengeDocument>): AdapterResult<LearnerChallenge> {
   const invalid = validateCurrent(source), learnerIdentity = identity(source); if (invalid.length || Array.isArray(learnerIdentity)) return fail([...invalid, ...(Array.isArray(learnerIdentity) ? learnerIdentity : [])], 'invalid-publication')
+  if (isChallengePolicyContent(source.document.content)) return fail([finding('challenge', 'challenge.assignment-required', '$.content', 'A Challenge policy is not learner coding content.', 'Deliver an immutable daily assignment plus its exact Practice DTO.')], 'requires-learner-upgrade')
   const errors: AdapterFinding[] = [], contract = source.learnerContract?.challenge
   if (source.document.content.rewards.points !== 20) errors.push(finding('challenge', 'challenge.reward-policy', '$.content.rewards.points', 'Current learner assignments require exactly 20 coins.', 'Author the confirmed reward or upgrade assignment/reward integration.'))
   if (contract?.streakIncrement !== 1) errors.push(finding('challenge', 'challenge.streak-contract-missing', '$.learnerContract.challenge.streakIncrement', 'The immutable publication does not explicitly require a +1 streak.', 'Add a frozen Challenge streak field to V2.', 'error'))

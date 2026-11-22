@@ -4,12 +4,15 @@ import type { AdminRole } from '../auth/permissions.js'
 import { assetMetadataSchema } from '../assets/asset.schema.js'
 import { contentEnvelopeSchema, contentTypeSchema, type ContentDocument, type ContentType } from '../content/core/envelope.js'
 import { isoDateTimeSchema, uuidSchema } from '../content/core/identifiers.js'
+import { validateChallengePolicyCompatibility } from '../content/domains/challenges/challenge.compatibility.js'
+import { isChallengePolicyContent } from '../content/domains/challenges/challenge.schema.js'
 
 export const PUBLICATION_CONTRACT_VERSION = 2 as const
 export const V2_PUBLICATION_COLLECTION = 'editorV2Publications'
 export const V2_PUBLICATION_AUDIT_COLLECTION = 'editorV2PublicationAudit'
 export const V2_PUBLISHED_ASSET_PREFIX = 'editor-v2-published-assets/sha256'
 export const IDEMPOTENCY_RETENTION_DAYS = 30
+export const validateChallengePolicyPublicationCompatibility = validateChallengePolicyCompatibility
 export const publicationNamespaceSchema = z.enum(['legacy', 'v2'])
 export type PublicationNamespace = z.infer<typeof publicationNamespaceSchema>
 export const publicationIdentitySchema = z.object({ namespace: publicationNamespaceSchema, contentType: contentTypeSchema, contentId: uuidSchema, publicationVersion: z.number().int().positive() }).strict()
@@ -90,7 +93,8 @@ export function validatePublicationCompatibility(document: ContentDocument, opti
   if (containsExternalImage(document)) findings.push(issue(domain, 'error', '$.content', 'assets.external-image-unresolved', 'External HTTPS images are editable but cannot be published as immutable V2 assets.', 'Import the image into the private V2 asset registry.', 'approved-design-decision'))
   for (const id of collectAssetIds(document)) if (!options.resolvedAssetIds?.has(id)) findings.push(issue(domain, 'error', '$.content', 'assets.not-ready', `Referenced asset ${id} is not resolved for immutable publication.`, 'Resolve and hash every referenced private asset.', 'approved-design-decision'))
   if (domain === 'practice' && (!document.content.execution || !document.content.executablePublicTests)) findings.push(issue(domain, 'error', '$.content.execution', 'practice.execution-contract-missing', 'Legacy Practice content remains readable but cannot be delivered without an explicit execution contract.', 'Migrate the document explicitly; do not infer execution from generic text or JSON examples.', 'requires-learner-implementation'))
-  if (domain === 'challenge') { if (document.content.rewards.points !== 20) findings.push(issue(domain, 'warning', '$.content.rewards.points', 'challenge.reward-incompatible', 'Current learner assignments require a fixed 20-coin reward.', 'Map to the approved reward contract or defer learner delivery.', 'confirmed-by-inspected-source')); findings.push(issue(domain, 'warning', '$.content.rewards', 'challenge.streak-contract-missing', 'V2 does not represent the required streak increment of one.', 'Add an explicit compatibility contract before assignment integration.', 'requires-learner-implementation')) }
+  if (domain === 'challenge' && isChallengePolicyContent(document.content)) findings.push(issue(domain, 'error', '$.content.source', 'challenge-policy.candidate-validation-required', 'Publication requires an authoritative safe Practice candidate snapshot.', 'Integrate the authenticated candidate metadata source before publishing.', 'requires-deployed-verification'))
+  if (domain === 'challenge' && !isChallengePolicyContent(document.content)) { if (document.content.rewards.points !== 20) findings.push(issue(domain, 'warning', '$.content.rewards.points', 'challenge.reward-incompatible', 'Current learner assignments require a fixed 20-coin reward.', 'Map to the approved reward contract or defer learner delivery.', 'confirmed-by-inspected-source')); findings.push(issue(domain, 'warning', '$.content.rewards', 'challenge.streak-contract-missing', 'V2 does not represent the required streak increment of one.', 'Add an explicit compatibility contract before assignment integration.', 'requires-learner-implementation')) }
   if (domain === 'project') { findings.push(issue(domain, 'warning', '$.content.starterWorkspace', 'project.runtime-missing', 'No explicit learner runtime identifier exists.', 'Add an explicit runtime contract; do not infer it from language.', 'requires-learner-implementation'), issue(domain, 'warning', '$.content.starterWorkspace', 'project.entrypoint-missing', 'No explicit Project entrypoint exists.', 'Add an entrypoint field or lossless derivation rule.', 'requires-learner-implementation'), issue(domain, 'warning', '$.content.checkpoints.*.tasks.*.validators', 'project.validator-id-missing', 'Project validators lack stable IDs.', 'Add stable validator identities.', 'requires-learner-implementation')) }
   const errors = findings.some((item) => item.severity === 'error'), learnerGaps = findings.some((item) => item.evidence === 'requires-learner-implementation')
   return { schemaValid: parsed.success, storageReady: parsed.success && !errors, learnerRuntimeCompatible: parsed.success && !errors && !learnerGaps, learnerIntegrationReady: false, findings }

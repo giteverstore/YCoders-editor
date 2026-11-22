@@ -23,6 +23,7 @@ function adminHandlers() {
     delivery: vi.fn(async () => undefined),
     draft: vi.fn(async () => undefined),
     publication: vi.fn(async () => undefined),
+    challengeCandidate: vi.fn(async () => undefined),
   }
 }
 
@@ -33,6 +34,7 @@ describe('consolidated V2 Admin router', () => {
     ['/api/v2/assets', 'asset', []],
     ['/api/v2/assets/asset-1', 'asset', ['asset-1']],
     ['/api/v2/assets/preview/asset-1', 'asset', ['asset-1', 'preview']],
+    ['/api/v2/challenge-candidates', 'challengeCandidate', []],
     ['/api/v2/publications/course-1', 'publication', ['course-1']],
     ['/api/v2/publications/course-1/prepare', 'publication', ['course-1', 'prepare']],
     ['/api/v2/publications/course-1/publish', 'publication', ['course-1', 'publish']],
