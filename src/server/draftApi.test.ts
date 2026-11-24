@@ -118,7 +118,12 @@ describe('environment safety and API client', () => {
   it('fails closed outside production without both emulators', () => {
     expect(() => assertSafeAdminEnvironment({ FIREBASE_ADMIN_PROJECT_ID: 'test' })).toThrow(/emulators/)
     expect(() => assertSafeAdminEnvironment({ FIREBASE_ADMIN_PROJECT_ID: EMULATOR_PROJECT_ID, FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080' })).not.toThrow()
-    expect(() => assertSafeAdminEnvironment({ FIREBASE_ADMIN_PROJECT_ID: 'prod', VERCEL_ENV: 'production' })).not.toThrow()
+    expect(() => assertSafeAdminEnvironment({ FIREBASE_ADMIN_PROJECT_ID: 'prod', VERCEL_ENV: 'production' })).toThrow(/Production WIF/)
+    const production = { VERCEL_ENV: 'production', FIREBASE_BACKEND_AUTH_MODE: 'production-wif', FIREBASE_ADMIN_PROJECT_ID: 'mi-tutora-pro', FIREBASE_STORAGE_BUCKET: 'mi-tutora-pro-admin-content', VERCEL_PROJECT_ID: 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', EDITOR_FIREBASE_WIF_AUDIENCE: '//iam.googleapis.com/projects/196429461457/locations/global/workloadIdentityPools/ai-tutor-vercel/providers/vercel-admin-production', EDITOR_FIREBASE_SERVICE_ACCOUNT_EMAIL: 'ycoders-admin-runtime@mi-tutora-pro.iam.gserviceaccount.com' }
+    expect(() => assertSafeAdminEnvironment(production)).not.toThrow()
+    expect(() => assertSafeAdminEnvironment({ ...production, FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099' })).toThrow(/emulator/)
+    expect(() => assertSafeAdminEnvironment({ ...production, FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080' })).toThrow(/emulator/)
+    expect(() => assertSafeAdminEnvironment({ ...production, FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199' })).toThrow(/emulator/)
   })
   it('rejects production IDs, remote emulator hosts, credential files, and ambiguous Firebase config', () => {
     const safe = { FIREBASE_ADMIN_PROJECT_ID: EMULATOR_PROJECT_ID, FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIRESTORE_EMULATOR_HOST: 'localhost:8080' }

@@ -18,6 +18,12 @@ export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = proc
   const authEmulator = Boolean(environment.FIREBASE_AUTH_EMULATOR_HOST)
   const firestoreEmulator = Boolean(environment.FIRESTORE_EMULATOR_HOST)
   if (!environment.FIREBASE_ADMIN_PROJECT_ID) throw new Error('FIREBASE_ADMIN_PROJECT_ID is required')
+  if (production) {
+    if (authEmulator || firestoreEmulator || environment.FIREBASE_STORAGE_EMULATOR_HOST) throw new Error('Production Firebase Admin cannot use emulator endpoints')
+    if (environment.FIREBASE_BACKEND_AUTH_MODE !== 'production-wif') throw new Error('Production Firebase Admin requires explicit Production WIF')
+    resolveFirebaseBackendWifConfig(environment)
+    return
+  }
   if (!production && (!authEmulator || !firestoreEmulator)) {
     if (environment.VERCEL_ENV !== 'preview') throw new Error('Non-production Firebase Admin requires both Auth and Firestore emulators')
     resolveFirebaseBackendWifConfig(environment); return
@@ -28,7 +34,7 @@ export function assertSafeAdminEnvironment(environment: NodeJS.ProcessEnv = proc
 function firebaseOptions(environment: NodeJS.ProcessEnv = process.env) {
   const emulatorMode = Boolean(environment.FIREBASE_AUTH_EMULATOR_HOST && environment.FIRESTORE_EMULATOR_HOST)
   if (emulatorMode) return { projectId: environment.FIREBASE_ADMIN_PROJECT_ID, storageBucket: environment.FIREBASE_STORAGE_BUCKET ?? `${environment.FIREBASE_ADMIN_PROJECT_ID}.appspot.com` }
-  if (environment.VERCEL_ENV === 'preview') { const config = resolveFirebaseBackendWifConfig(environment); return { credential: createFirebaseBackendWifCredential(environment), projectId: config.projectId, storageBucket: config.storageBucket } }
+  if (['preview', 'production'].includes(String(environment.VERCEL_ENV)) && !environment.FIRESTORE_EMULATOR_HOST) { const config = resolveFirebaseBackendWifConfig(environment); return { credential: createFirebaseBackendWifCredential(environment), projectId: config.projectId, storageBucket: config.storageBucket } }
   return { credential: applicationDefault(), projectId: environment.FIREBASE_ADMIN_PROJECT_ID, storageBucket: environment.FIREBASE_STORAGE_BUCKET ?? `${environment.FIREBASE_ADMIN_PROJECT_ID}.appspot.com` }
 }
 
@@ -36,7 +42,7 @@ function firebaseResources(environment: NodeJS.ProcessEnv = process.env) {
   assertSafeAdminEnvironment(environment)
   const options = firebaseOptions(environment)
   const app = getApps()[0] ?? initializeApp(options)
-  if (environment.VERCEL_ENV === 'preview' && !environment.FIRESTORE_EMULATOR_HOST) {
+  if (['preview', 'production'].includes(String(environment.VERCEL_ENV)) && !environment.FIRESTORE_EMULATOR_HOST) {
     const config = resolveFirebaseBackendWifConfig(environment), authClient = createFirebaseBackendWifAuthClient(environment)
     return { app, firestore: new Firestore({ projectId: config.projectId, databaseId: '(default)', preferRest: true, authClient }), bucket: new Storage({ projectId: config.projectId, authClient }).bucket(config.storageBucket) }
   }
