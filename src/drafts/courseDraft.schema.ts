@@ -26,6 +26,7 @@ export const courseDraftDocumentSchema: z.ZodType<CourseDocument> = z.object({
   updatedBy: actorIdSchema,
   metadata: z.object({ summary: draftText(500).optional(), tags: z.array(draftText(80)).max(30), locale: draftText(20) }).strict(),
   content: z.object({
+    courseIconAssetId: uuidSchema.optional(),
     description: draftText(5000), language: draftText(30), difficulty: z.enum(['beginner', 'intermediate', 'advanced']), estimatedMinutes: z.number().int().nonnegative().max(100_000),
     learningOutcomes: z.array(draftText(500)).max(50), modules: z.array(z.discriminatedUnion('organization', [directModule, sectionedModule])).max(100),
     courseMetadata: z.object({ prerequisites: z.array(draftText(300)).max(30), topics: z.array(draftText(80)).max(30) }).strict(),

@@ -12,6 +12,8 @@ export async function handlePublicationApi(request: Request, dependencies: Depen
     const permission = request.method === 'GET' ? 'publication:read' : 'publication:publish'
     const actor = await authenticateAdmin(request.authorization, permission, dependencies.verifier)
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return fail(422, 'INVALID_ID', 'Publication content ID must be a UUID')
+    const contentType = await dependencies.backend.contentType(request.contentId)
+    if (contentType === 'challenge' || contentType === 'project') return fail(403, 'DOMAIN_WORK_IN_PROGRESS', 'This content domain is not available in the current release')
     if (request.method === 'POST' && request.action === 'prepare') { const input = publicationPreparationInputSchema.safeParse(request.body); if (!input.success) return invalid(input.error); return ok(await dependencies.backend.prepare(request.contentId, input.data.expectedDraftRevision, actor.uid)) }
     if (request.method === 'POST' && request.action === 'publish') { const input = publicationInputSchema.safeParse(request.body); if (!input.success) return invalid(input.error); return ok(await dependencies.backend.publish({ contentId: request.contentId, ...input.data }, actor.uid), 201) }
     if (request.method === 'POST' && ['release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'].includes(request.action ?? '')) { const input = lifecycleInputSchema.safeParse({ ...(request.body as object), operation: request.action }); if (!input.success) return invalid(input.error); return ok(await dependencies.backend.lifecycle({ contentId: request.contentId, ...input.data }, actor.uid)) }

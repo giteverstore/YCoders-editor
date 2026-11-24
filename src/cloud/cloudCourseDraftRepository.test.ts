@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { validCourseDocument } from '../content/fixtures/validDocuments'
+import type { CourseDocument } from '../content/core/envelope'
 import type { CloudDraftRecord } from '../server/cloudDraft.types'
 import { CloudCourseDraftRepository } from './cloudCourseDraftRepository'
 import { DraftApiError, V2DraftApiClient } from './draftApiClient'
@@ -29,5 +30,17 @@ describe('CloudCourseDraftRepository', () => {
   it('maps duplicate creates separately from stale writes', async () => {
     const repository = new CloudCourseDraftRepository(api({ create: vi.fn().mockRejectedValue(new DraftApiError(409, 'DRAFT_ALREADY_EXISTS', 'exists')) }))
     await expect(repository.create(validCourseDocument)).rejects.toEqual(expect.objectContaining({ code: 'duplicate' }))
+  })
+  it('saves all three new Course authoring fields without transforming the document', async () => {
+    const document = structuredClone(validCourseDocument) as CourseDocument
+    document.content.courseIconAssetId = 'b0000000-0000-4000-8000-000000000011'
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('fixture')
+    module.lessons[0].blocks.push({ id: 'b0000000-0000-4000-8000-000000000012', schemaVersion: 1, type: 'quiz', data: { question: 'Select', mode: 'single-correct', options: [{ id: 'b0000000-0000-4000-8000-000000000013', text: 'A', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000014', text: 'B', isCorrect: false }] } } as never)
+    const save = vi.fn(async (_id, received) => ({ ...dto(2), document: structuredClone(received) }))
+    const repository = new CloudCourseDraftRepository(api({ save }))
+    const result = await repository.save(document.id, document, 1)
+    expect(result.document).toEqual(document)
+    expect(save.mock.calls[0][1]).toEqual(document)
   })
 })

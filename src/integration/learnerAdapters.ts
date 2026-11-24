@@ -3,7 +3,7 @@ import type { ContentBlock } from '../content/blocks/block.schemas.js'
 import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
 import { practiceArgumentTypeSchema, practiceExecutionModeSchema, practiceLanguageIdSchema, practiceResultTypeSchema, practiceSemanticValidatorIdSchema } from '../content/domains/practice/practice.execution.js'
 
-const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table'])
+const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise'])
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })
 const fail = <T>(errors: AdapterFinding[], classification: 'requires-learner-upgrade' | 'requires-v2-schema-change' | 'invalid-publication', warnings: AdapterFinding[] = []): AdapterResult<T> => ({ ok: false, errors, warnings, classification })
 const success = <T>(value: T, warnings: AdapterFinding[] = []): AdapterResult<T> => ({ ok: true, value, warnings, classification: warnings.length ? 'compatible-with-warnings' : 'compatible' })
@@ -24,6 +24,36 @@ function adaptBlocks(source: AdapterSource, blocks: ContentBlock[], path: string
   const errors: AdapterFinding[] = [], manifest = new Set(source.assetManifest.map(x => x.assetId))
   const mapped = blocks.flatMap((block, index) => {
     if (!supportedBlocks.has(block.type)) { errors.push(finding(source.document.contentType, 'block.unsupported', `${path}[${index}]`, `Block type ${block.type} is unsupported by the current learner adapter.`, 'Add learner rendering support or replace the block.')); return [] }
+    if (block.type === 'quiz') {
+      if (!block.data.mode) {
+        errors.push(finding('course', 'quiz.mode-required', `${path}[${index}].data.mode`, 'Quiz answer mode must be explicit.', 'Choose single-correct or multiple-correct.'))
+        return []
+      }
+      const { question, mode, options, explanation } = block.data
+      return [{
+        ...block,
+        data: {
+          question,
+          mode,
+          selectionMode: mode === 'multiple-correct' ? 'multiple' : 'single',
+          options: options.map(({ id, text }) => ({ id, text })),
+          correctOptionIds: options.filter(({ isCorrect }) => isCorrect).map(({ id }) => id),
+          ...(explanation === undefined ? {} : { explanation }),
+        },
+      } as LearnerBlock]
+    }
+    if (block.type === 'exercise') {
+      const { prompt, language, starterCode, publicTests = [] } = block.data
+      return [{
+        ...block,
+        data: {
+          prompt: structuredClone(prompt),
+          ...(language === undefined ? {} : { language }),
+          ...(starterCode === undefined ? {} : { starterCode }),
+          publicTests: publicTests.map(({ id, input, expectedOutput }) => ({ id, input, expectedOutput })),
+        },
+      } as LearnerBlock]
+    }
     if (block.type !== 'image') return [structuredClone(block) as LearnerBlock]
     if (!('assetId' in block.data)) { errors.push(finding(source.document.contentType, 'asset.external', `${path}[${index}].data`, 'External image URLs are not version-addressed V2 assets.', 'Publish the image through the immutable asset manifest.')); return [] }
     if (!manifest.has(block.data.assetId)) { errors.push(finding(source.document.contentType, 'asset.manifest-missing', `${path}[${index}].data.assetId`, 'The image is absent from the immutable asset manifest.', 'Repair the publication before learner delivery.')); return [] }
@@ -39,8 +69,14 @@ export function adaptCourse(source: AdapterSource<CourseDocument>): AdapterResul
   const ids = lessons.map(x => x.id), defaultLessonId = source.learnerContract?.course?.defaultLessonId ?? ids[0]
   if (!ids.includes(defaultLessonId)) errors.push(finding('course', 'course.navigation-target-invalid', '$.learnerContract.course.defaultLessonId', 'Default lesson does not reference a lesson in this publication.', 'Choose a stable lesson ID from this exact version.'))
   for (const removed of source.previousStableIds?.filter(id => !ids.includes(id)) ?? []) errors.push(finding('course', 'course.lesson-id-removed', '$.content.modules', `Previously stable lesson ID ${removed} was removed.`, 'Restore the stable lesson or publish a new independent identity.'))
+  const courseIconAssetId = source.document.content.courseIconAssetId
+  let courseIcon: AssetDeliveryDescriptor | null = null
+  if (courseIconAssetId) {
+    if (source.assetManifest.some(({ assetId }) => assetId === courseIconAssetId)) courseIcon = assetDeliveryDescriptor('v2', source.identity.contentId, source.identity.publicationVersion, courseIconAssetId)
+    else errors.push(finding('course', 'course.icon-manifest-missing', '$.content.courseIconAssetId', 'The Course icon is absent from the immutable publication asset manifest.', 'Repair the publication manifest before learner delivery.'))
+  }
   if (errors.length) return fail(errors, errors.some(x => x.code === 'publication.invalid') ? 'invalid-publication' : 'requires-learner-upgrade')
-  return success({ identity: learnerIdentity, courseId: source.document.id, title: source.document.title, description: source.document.content.description, language: source.document.content.language, difficulty: source.document.content.difficulty, estimatedMinutes: source.document.content.estimatedMinutes, learningOutcomes: [...source.document.content.learningOutcomes], prerequisites: [...source.document.content.courseMetadata.prerequisites], defaultLessonId, modules, navigation: ids.map((lessonId, index) => ({ lessonId, previousLessonId: ids[index - 1] ?? null, nextLessonId: ids[index + 1] ?? null })) })
+  return success({ identity: learnerIdentity, courseId: source.document.id, title: source.document.title, description: source.document.content.description, language: source.document.content.language, difficulty: source.document.content.difficulty, estimatedMinutes: source.document.content.estimatedMinutes, learningOutcomes: [...source.document.content.learningOutcomes], prerequisites: [...source.document.content.courseMetadata.prerequisites], courseIcon, defaultLessonId, modules, navigation: ids.map((lessonId, index) => ({ lessonId, previousLessonId: ids[index - 1] ?? null, nextLessonId: ids[index + 1] ?? null })) })
 }
 
 export function adaptPractice(source: AdapterSource<PracticeDocument>): AdapterResult<LearnerPractice> {

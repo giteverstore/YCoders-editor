@@ -4,7 +4,7 @@ import type { getStorage } from 'firebase-admin/storage'
 import { z } from 'zod'
 
 import { ASSET_COLLECTION, assetMetadataSchema, type AssetMetadata } from '../assets/asset.schema.js'
-import { contentEnvelopeSchema, type ContentDocument } from '../content/core/envelope.js'
+import { contentEnvelopeSchema, type ContentDocument, type ContentType } from '../content/core/envelope.js'
 import { uuidSchema } from '../content/core/identifiers.js'
 import {
   PUBLICATION_CONTRACT_VERSION, V2_PUBLICATION_AUDIT_COLLECTION, V2_PUBLICATION_COLLECTION,
@@ -39,6 +39,15 @@ export class PublicationBackend {
   constructor(private readonly firestore: Firestore, private readonly bucket: Bucket, private readonly now = () => new Date()) {}
 
   async pointer(contentId: string): Promise<Pointer | null> { const snap = await this.pointerRef(contentId).get(); return snap.exists ? snap.data() as Pointer : null }
+  async contentType(contentId: string): Promise<ContentType | null> {
+    const pointer = await this.pointer(contentId)
+    if (pointer) return pointer.contentType
+    const draft = await this.firestore.collection(V2_DRAFT_COLLECTION).doc(contentId).get()
+    if (!draft.exists) return null
+    const data = draft.data() as { contentType?: unknown; document?: unknown }
+    const parsed = contentEnvelopeSchema.safeParse(data.document)
+    return parsed.success ? parsed.data.contentType : null
+  }
   async versions(contentId: string): Promise<unknown[]> { const pointer = await this.pointer(contentId), snap = await this.pointerRef(contentId).collection('versions').orderBy('identity.publicationVersion', 'desc').get(); return snap.docs.map((doc) => this.summarizeVersion(doc.data() as Record<string, unknown>, pointer?.activeVersionNumber ?? null)) }
   async version(contentId: string, version: number): Promise<Record<string, unknown> | null> { const snap = await this.pointerRef(contentId).collection('versions').doc(String(version)).get(); return snap.exists ? snap.data() as Record<string, unknown> : null }
   async artifact(contentId: string, version: number): Promise<Uint8Array> { const record = await this.version(contentId, version); if (!record) throw new PublicationError('VERSION_NOT_FOUND', 'Publication version not found', 404); const [bytes] = await this.bucket.file(String(record.artifactPath)).download(); const digest = hashBytes(bytes); if (digest !== record.artifactHash) throw new PublicationError('ARTIFACT_CORRUPT', 'Publication artifact failed integrity verification', 503); return new Uint8Array(bytes) }

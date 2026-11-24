@@ -31,6 +31,7 @@ const sectionedModuleSchema = z.object({
 export const courseModuleSchema = z.discriminatedUnion('organization', [flatModuleSchema, sectionedModuleSchema])
 
 export const courseContentSchema = z.object({
+  courseIconAssetId: uuidSchema.optional(),
   description: z.string().min(1).max(5000),
   language: z.string().regex(/^[a-z]{2,3}(?:-[A-Z]{2})?$/),
   difficulty: difficultySchema,

@@ -25,11 +25,46 @@ export async function handleDraftApi(request: ApiRequest, dependencies: Dependen
       if (!request.contentType?.toLowerCase().startsWith('application/json')) return failure(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type must be application/json')
       if ((request.contentLength ?? new TextEncoder().encode(JSON.stringify(request.body ?? null)).byteLength) > MAX_API_BODY_BYTES) return failure(413, 'REQUEST_TOO_LARGE', 'Request body exceeds 5 MB')
     }
-    if (!request.id && request.method === 'GET') { const type = request.draftType ? contentTypeSchema.safeParse(request.draftType) : null; if (type && !type.success) return failure(422, 'INVALID_CONTENT_TYPE', 'Unsupported draft content type'); return success(await dependencies.repository.list(type?.data)) }
-    if (!request.id && request.method === 'POST') { const input = createSchema.safeParse(request.body); if (!input.success) return invalid(input.error); return success(await dependencies.repository.create(input.data.document, admin.uid), 201) }
-    if (request.id && request.method === 'GET') { const record = await dependencies.repository.get(request.id); return record ? success(record) : failure(404, 'DRAFT_NOT_FOUND', 'Draft not found') }
-    if (request.id && request.method === 'PUT') { const input = saveSchema.safeParse(request.body); if (!input.success) return invalid(input.error); if (input.data.document.id !== request.id) return failure(422, 'IDENTITY_MISMATCH', 'Document ID must match the path ID'); return success(await dependencies.repository.save(request.id, input.data.document, input.data.expectedRevision, admin.uid)) }
-    if (request.id && request.method === 'DELETE') { const input = revisionSchema.safeParse(request.body); if (!input.success) return invalid(input.error); await dependencies.repository.delete(request.id, input.data.expectedRevision); return { status: 200, body: { ok: true, data: { deleted: true } } } }
+    if (!request.id && request.method === 'GET') {
+      const type = request.draftType ? contentTypeSchema.safeParse(request.draftType) : null
+      if (type && !type.success) return failure(422, 'INVALID_CONTENT_TYPE', 'Unsupported draft content type')
+      if (type?.success && !isReleaseDomain(type.data)) return domainUnavailable()
+      const contentTypes = type?.success ? [type.data] : ['course', 'practice'] as const
+      const lists = await Promise.all(contentTypes.map((contentType) => dependencies.repository.list(contentType)))
+      return success(lists.flat().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)))
+    }
+    if (!request.id && request.method === 'POST') {
+      const contentType = (request.body as { document?: { contentType?: unknown } } | undefined)?.document?.contentType
+      if (typeof contentType === 'string' && !isReleaseDomain(contentType)) return domainUnavailable()
+      const input = createSchema.safeParse(request.body)
+      if (!input.success) return invalid(input.error)
+      if (!isReleaseDomain(input.data.document.contentType)) return domainUnavailable()
+      return success(await dependencies.repository.create(input.data.document, admin.uid), 201)
+    }
+    if (request.id && request.method === 'GET') {
+      const record = await dependencies.repository.get(request.id)
+      if (!record) return failure(404, 'DRAFT_NOT_FOUND', 'Draft not found')
+      if (!isReleaseDomain(record.contentType)) return domainUnavailable()
+      return success(record)
+    }
+    if (request.id && request.method === 'PUT') {
+      const contentType = (request.body as { document?: { contentType?: unknown } } | undefined)?.document?.contentType
+      if (typeof contentType === 'string' && !isReleaseDomain(contentType)) return domainUnavailable()
+      const input = saveSchema.safeParse(request.body)
+      if (!input.success) return invalid(input.error)
+      if (input.data.document.id !== request.id) return failure(422, 'IDENTITY_MISMATCH', 'Document ID must match the path ID')
+      if (!isReleaseDomain(input.data.document.contentType)) return domainUnavailable()
+      return success(await dependencies.repository.save(request.id, input.data.document, input.data.expectedRevision, admin.uid))
+    }
+    if (request.id && request.method === 'DELETE') {
+      const input = revisionSchema.safeParse(request.body)
+      if (!input.success) return invalid(input.error)
+      const record = await dependencies.repository.get(request.id)
+      if (!record) return failure(404, 'DRAFT_NOT_FOUND', 'Draft not found')
+      if (!isReleaseDomain(record.contentType)) return domainUnavailable()
+      await dependencies.repository.delete(request.id, input.data.expectedRevision)
+      return { status: 200, body: { ok: true, data: { deleted: true } } }
+    }
     return failure(405, 'METHOD_NOT_ALLOWED', 'Method not allowed')
   } catch (error) {
     if (error instanceof AuthenticationError) return failure(401, 'AUTHENTICATION_REQUIRED', error.message)
@@ -47,3 +82,5 @@ export async function handleDraftApi(request: ApiRequest, dependencies: Dependen
 const success = (data: unknown, status = 200): ApiResult => ({ status, body: { ok: true, data } })
 const failure = (status: number, code: string, message: string, details?: unknown): ApiResult => ({ status, body: { ok: false, error: { code, message, ...(details === undefined ? {} : { details }) } } })
 const invalid = (error: z.ZodError): ApiResult => failure(422, 'INVALID_DRAFT', 'Request validation failed', error.issues.map((issue) => ({ path: issue.path, message: issue.message })))
+const isReleaseDomain = (contentType: string): contentType is 'course' | 'practice' => contentType === 'course' || contentType === 'practice'
+const domainUnavailable = (): ApiResult => failure(403, 'DOMAIN_WORK_IN_PROGRESS', 'This content domain is not available in the current release')

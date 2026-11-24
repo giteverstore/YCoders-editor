@@ -1,6 +1,6 @@
 import type { ContentBlock } from '../../content/blocks/block.schemas'
 import type { CourseDocument } from '../../content/core/envelope'
-import { ContentImage } from '../../assets/AssetPicker'
+import { AuthenticatedAssetImage, ContentImage } from '../../assets/AssetPicker'
 
 function RichNodes({ node }: { node: Record<string, unknown> }) {
   const type = node.type as string
@@ -42,5 +42,12 @@ function PreviewBlock({ block }: { block: ContentBlock }) {
 }
 
 export function CoursePreview({ document }: { document: CourseDocument }) {
-  return <article className="course-preview"><div className="preview-notice">Standalone studio approximation — learner UI integration is not included.</div><header><span>{document.content.difficulty} · {document.content.estimatedMinutes} min</span><h1>{document.title}</h1><p>{document.content.description}</p></header>{document.content.modules.map((module) => <section key={module.id}><h2>{module.title}</h2>{(module.organization === 'lessons' ? module.lessons : module.sections.flatMap((section) => section.lessons)).map((lesson) => <div className="preview-lesson" key={lesson.id}><h3>{lesson.title}</h3>{lesson.blocks.map((block) => <PreviewBlock block={block} key={block.id} />)}</div>)}</section>)}</article>
+  return <article className="course-preview"><div className="preview-notice">Standalone studio approximation — learner UI integration is not included.</div><header>
+  {document.content.courseIconAssetId ? (
+    <AuthenticatedAssetImage
+      assetId={document.content.courseIconAssetId}
+      alt={`${document.title} icon`}
+    />
+  ) : null}
+  <span>{document.content.difficulty} · {document.content.estimatedMinutes} min</span><h1>{document.title}</h1><p>{document.content.description}</p></header>{document.content.modules.map((module) => <section key={module.id}><h2>{module.title}</h2>{(module.organization === 'lessons' ? module.lessons : module.sections.flatMap((section) => section.lessons)).map((lesson) => <div className="preview-lesson" key={lesson.id}><h3>{lesson.title}</h3>{lesson.blocks.map((block) => <PreviewBlock block={block} key={block.id} />)}</div>)}</section>)}</article>
 }

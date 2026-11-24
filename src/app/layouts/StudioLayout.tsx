@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { domains, getDomainFromPath } from '../../lib/domains'
+import { getReleaseDomainStatus } from '../../lib/releaseDomains'
 import { useAuth } from '../../auth/authContext'
 
 export function StudioLayout() {
@@ -29,11 +30,16 @@ export function StudioLayout() {
         </div>
         <nav className="sidebar__nav">
           <p className="eyebrow">Workspace</p>
-          {domains.map(({ icon: Icon, plural, slug }) => (
+          {domains.map(({ icon: Icon, plural, slug }) => getReleaseDomainStatus(slug) === 'enabled' ? (
             <NavLink key={slug} to={`/${slug}`} onClick={closeSidebar} className={({ isActive }) => `nav-link ${isActive ? 'nav-link--active' : ''}`}>
               <Icon size={19} aria-hidden="true" />
               <span>{plural}</span>
             </NavLink>
+          ) : (
+            <div key={slug} className="nav-link nav-link--disabled" aria-disabled="true" title={`${plural} are Work in Progress`}>
+              <Icon size={19} aria-hidden="true" />
+              <span>{plural}<small>Work in Progress</small></span>
+            </div>
           ))}
         </nav>
         <div className="sidebar__footer"><PanelLeftClose size={17} aria-hidden="true" /><span>Studio foundation · E1</span></div>

@@ -16,7 +16,7 @@ const base = { schemaVersion: CURRENT_SCHEMA_VERSION, documentVersion: 1, status
 
 export const validCourseDocument = {
   ...base, id: ids.course, contentType: 'course' as const, title: 'TypeScript Foundations', slug: 'typescript-foundations',
-  content: { description: 'Learn typed JavaScript from first principles.', language: 'en', difficulty: 'beginner' as const, estimatedMinutes: 180, learningOutcomes: ['Use TypeScript types safely'], courseMetadata: { prerequisites: ['Basic JavaScript'], topics: ['TypeScript'] }, modules: [{ id: ids.module, title: 'Core types', organization: 'lessons' as const, lessons: [{ id: ids.lesson, title: 'Primitive types', estimatedMinutes: 20, blocks: [richBlock(ids.b1, 'Types describe the shape of values.')] }] }] },
+  content: { courseIconAssetId: undefined as string | undefined, description: 'Learn typed JavaScript from first principles.', language: 'en', difficulty: 'beginner' as const, estimatedMinutes: 180, learningOutcomes: ['Use TypeScript types safely'], courseMetadata: { prerequisites: ['Basic JavaScript'], topics: ['TypeScript'] }, modules: [{ id: ids.module, title: 'Core types', organization: 'lessons' as const, lessons: [{ id: ids.lesson, title: 'Primitive types', estimatedMinutes: 20, blocks: [richBlock(ids.b1, 'Types describe the shape of values.')] }] }] },
 }
 
 export const validPracticeDocument = {

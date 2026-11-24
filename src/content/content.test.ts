@@ -45,6 +45,21 @@ describe('V2 content documents', () => {
     expect(validateContent(invalidFixtures.unsupportedBlock).success).toBe(false)
   })
 
+  it('validates explicit single and multiple quiz modes without changing authored answers', () => {
+    const quiz = { id: '91000000-0000-4000-8000-000000000001', schemaVersion: BLOCK_SCHEMA_VERSION, type: 'quiz', data: { question: 'Choose', mode: 'single-correct', options: [{ id: '91000000-0000-4000-8000-000000000002', text: ' A ', isCorrect: true }, { id: '91000000-0000-4000-8000-000000000003', text: 'B', isCorrect: false }] } } as const
+    expect(blockSchema.safeParse(quiz).success).toBe(true)
+    expect(blockSchema.safeParse({ ...quiz, data: { ...quiz.data, mode: 'multiple-correct', options: [...quiz.data.options, { id: '91000000-0000-4000-8000-000000000004', text: 'C', isCorrect: true }] } }).success).toBe(true)
+    expect(blockSchema.safeParse({ ...quiz, data: { ...quiz.data, options: [{ ...quiz.data.options[0], id: quiz.data.options[1].id }] } }).success).toBe(false)
+    expect(blockSchema.safeParse({ ...quiz, data: { ...quiz.data, mode: 'multiple-correct', options: [{ ...quiz.data.options[0], isCorrect: true }, { ...quiz.data.options[1], isCorrect: true }] } }).success).toBe(false)
+  })
+
+  it('supports unbounded-by-ui public exercise case arrays with stable IDs and optional legacy reading', () => {
+    const exercise = { id: '91000000-0000-4000-8000-000000000011', schemaVersion: BLOCK_SCHEMA_VERSION, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph' }] }, language: 'javascript', starterCode: '', publicTests: [{ id: '91000000-0000-4000-8000-000000000012', input: '', expectedOutput: '' }] } } as const
+    expect(blockSchema.safeParse(exercise).success).toBe(true)
+    expect(blockSchema.safeParse({ ...exercise, data: { ...exercise.data, publicTests: [exercise.data.publicTests[0], exercise.data.publicTests[0]] } }).success).toBe(false)
+    expect(blockSchema.safeParse({ ...exercise, data: { prompt: exercise.data.prompt } }).success).toBe(true)
+  })
+
   it('rejects blocks disallowed by a domain', () => {
     const value: Record<string, unknown> = clone(validChallengeDocument)
     const content = value.content as { instructions: unknown[] }

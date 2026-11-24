@@ -88,6 +88,22 @@ describe('IndexedDB course draft repository', () => {
     await expect(repo.create(incomplete)).resolves.toMatchObject({ revision: 1 })
   })
 
+  it('round-trips quiz mode/options, public exercise tests, and the Course icon reference', async () => {
+    const repo = repository(), document = structuredClone(createCourseDocument(ids()))
+    document.content.courseIconAssetId = 'b0000000-0000-4000-8000-000000000011'
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('fixture')
+    module.lessons[0].blocks.push(
+      { id: 'b0000000-0000-4000-8000-000000000012', schemaVersion: 1, type: 'quiz', data: { question: 'Select', mode: 'multiple-correct', options: [{ id: 'b0000000-0000-4000-8000-000000000013', text: 'A', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000014', text: 'B', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000015', text: 'C', isCorrect: false }] } } as never,
+      { id: 'b0000000-0000-4000-8000-000000000016', schemaVersion: 1, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Code' }] }] }, language: 'javascript', starterCode: '', publicTests: [{ id: 'b0000000-0000-4000-8000-000000000017', input: 'x', expectedOutput: 'y' }] } } as never,
+    )
+    await repo.create(document)
+    const recovered = (await repo.get(document.id))!.document
+    expect(recovered.content.courseIconAssetId).toBe(document.content.courseIconAssetId)
+    expect(JSON.stringify(recovered)).toContain('multiple-correct')
+    expect(JSON.stringify(recovered)).toContain('expectedOutput')
+  })
+
   it('rejects unsafe or structurally arbitrary draft JSON', async () => {
     const repo = repository()
     const document = createCourseDocument(ids())

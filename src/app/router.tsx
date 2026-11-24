@@ -11,17 +11,23 @@ import { AuthGate } from '../auth/AuthGate'
 import { LoginPage } from '../auth/LoginPage'
 import { PracticeDraftListPage } from '../features/practice/PracticeDraftListPage'
 import { PracticeEditorRoute } from '../features/practice/PracticeEditorRoute'
-import { ChallengeDraftListPage } from '../features/challenges/ChallengeDraftListPage'
-import { ChallengeEditorRoute } from '../features/challenges/ChallengeEditorRoute'
-import { ProjectDraftListPage } from '../features/projects/ProjectDraftListPage'
-import { ProjectEditorRoute } from '../features/projects/ProjectEditorRoute'
+import { DomainWorkInProgressPage } from '../features/shared/DomainWorkInProgressPage'
+import { getReleaseDomainStatus } from '../lib/releaseDomains'
 
-const domainRoutes = domains.map((domain) => ({
-  path: domain.slug,
-  children: [
-    { index: true, element: domain.slug === 'courses' ? <CourseDraftListPage /> : domain.slug === 'practice' ? <PracticeDraftListPage /> : domain.slug === 'challenges' ? <ChallengeDraftListPage /> : domain.slug === 'projects'?<ProjectDraftListPage/>:<DomainListPage domain={domain} /> },
-    { path: 'new', element: domain.slug === 'courses' ? <CourseEditorRoute /> : domain.slug === 'practice' ? <PracticeEditorRoute /> : domain.slug === 'challenges' ? <ChallengeEditorRoute /> : domain.slug==='projects'?<ProjectEditorRoute/>:<DomainEditorPage domain={domain} mode="create" /> },
-    { path: ':id/edit', element: domain.slug === 'courses' ? <CourseEditorRoute /> : domain.slug === 'practice' ? <PracticeEditorRoute /> : domain.slug === 'challenges' ? <ChallengeEditorRoute /> : domain.slug==='projects'?<ProjectEditorRoute/>:<DomainEditorPage domain={domain} mode="edit" /> },
+const domainRoutes = domains.map((domain) => getReleaseDomainStatus(domain.slug) === 'work-in-progress'
+  ? {
+    path: domain.slug,
+    children: [
+      { index: true, element: <DomainWorkInProgressPage domain={domain.plural} /> },
+      { path: '*', element: <DomainWorkInProgressPage domain={domain.plural} /> },
+    ],
+  }
+  : {
+    path: domain.slug,
+    children: [
+    { index: true, element: domain.slug === 'courses' ? <CourseDraftListPage /> : domain.slug === 'practice' ? <PracticeDraftListPage /> : <DomainListPage domain={domain} /> },
+    { path: 'new', element: domain.slug === 'courses' ? <CourseEditorRoute /> : domain.slug === 'practice' ? <PracticeEditorRoute /> : <DomainEditorPage domain={domain} mode="create" /> },
+    { path: ':id/edit', element: domain.slug === 'courses' ? <CourseEditorRoute /> : domain.slug === 'practice' ? <PracticeEditorRoute /> : <DomainEditorPage domain={domain} mode="edit" /> },
     ...(domain.slug === 'courses' ? [
       { path: 'local/new', element: <CourseEditorRoute source="local" /> },
       { path: 'local/:id/edit', element: <CourseEditorRoute source="local" /> },
@@ -34,10 +40,8 @@ const domainRoutes = domains.map((domain) => ({
       { path: 'cloud/new', element: <PracticeEditorRoute source="cloud" /> },
       { path: 'cloud/:id/edit', element: <PracticeEditorRoute source="cloud" /> },
     ] : []),
-    ...(domain.slug === 'challenges' ? [{path:'local/new',element:<ChallengeEditorRoute source="local"/>},{path:'local/:id/edit',element:<ChallengeEditorRoute source="local"/>},{path:'cloud/new',element:<ChallengeEditorRoute source="cloud"/>},{path:'cloud/:id/edit',element:<ChallengeEditorRoute source="cloud"/>}] : []),
-    ...(domain.slug === 'projects' ? [{path:'local/new',element:<ProjectEditorRoute source="local"/>},{path:'local/:id/edit',element:<ProjectEditorRoute source="local"/>},{path:'cloud/new',element:<ProjectEditorRoute source="cloud"/>},{path:'cloud/:id/edit',element:<ProjectEditorRoute source="cloud"/>}] : []),
   ],
-}))
+  })
 
 export const router = createBrowserRouter([
   {

@@ -71,6 +71,59 @@ describe('final publication contracts', () => {
     expect(result.schemaValid).toBe(true); expect(result.learnerRuntimeCompatible).toBe(false); expect(result.storageReady).toBe(false)
     expect(result.findings.map(({ code }) => code)).toContain('practice.execution-contract-missing')
   })
+  it('requires an explicit Course quiz mode and valid correctness counts', () => {
+    const document = structuredClone(validCourseDocument) as unknown as ContentDocument
+    if (document.contentType !== 'course') throw new Error('Expected Course fixture')
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    const blockId = uuid('41')
+    module.lessons[0].blocks.push({ id: blockId, schemaVersion: 1, type: 'quiz', data: { question: 'Choose', options: [
+      { id: uuid('42'), text: 'A', isCorrect: true },
+      { id: uuid('43'), text: 'B', isCorrect: false },
+    ] } } as never)
+    let codes = validatePublicationCompatibility(document).findings.map(({ code }) => code)
+    expect(codes).toEqual(expect.arrayContaining(['course.icon-required', 'quiz.mode-required']))
+
+    const quiz = module.lessons[0].blocks.at(-1) as unknown as { data: { mode?: string; options: Array<{ id: string; text: string; isCorrect: boolean }> } }
+    quiz.data.mode = 'single-correct'
+    quiz.data.options[1].isCorrect = true
+    codes = validatePublicationCompatibility(document).findings.map(({ code }) => code)
+    expect(codes).toContain('quiz.single-correct-answer-count-invalid')
+    quiz.data.mode = 'multiple-correct'
+    quiz.data.options[1].isCorrect = false
+    codes = validatePublicationCompatibility(document).findings.map(({ code }) => code)
+    expect(codes).toContain('quiz.multi-correct-answer-count-invalid')
+  })
+  it('reports empty and duplicate quiz options and invalid exercise public cases', () => {
+    const document = structuredClone(validCourseDocument)
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    const sharedId = uuid('44')
+    module.lessons[0].blocks.push(
+      { id: uuid('45'), schemaVersion: 1, type: 'quiz', data: { question: 'Choose', mode: 'single-correct', options: [
+        { id: sharedId, text: ' ', isCorrect: true }, { id: sharedId, text: 'B', isCorrect: false },
+      ] } } as never,
+      { id: uuid('46'), schemaVersion: 1, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph' }] }, language: 'javascript', starterCode: '', publicTests: [
+        { id: uuid('47'), input: 4, expectedOutput: '4' }, { id: uuid('47'), input: '2' },
+      ] } } as never,
+    )
+    const codes = validatePublicationCompatibility(document).findings.map(({ code }) => code)
+    expect(codes).toEqual(expect.arrayContaining(['quiz.option-empty', 'quiz.option-id-duplicate', 'exercise.test-id-duplicate', 'exercise.test-input-invalid', 'exercise.expected-output-missing']))
+  })
+  it('blocks coding exercises without public tests and accepts the corrected Course', () => {
+    const document = structuredClone(validCourseDocument)
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    const exerciseId = uuid('48'), iconId = uuid('49')
+    module.lessons[0].blocks.push({ id: exerciseId, schemaVersion: 1, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph' }] }, language: 'javascript', starterCode: 'console.log(0)' } } as never)
+    expect(validatePublicationCompatibility(document).findings.map(({ code }) => code)).toContain('exercise.public-tests-missing')
+    document.content.courseIconAssetId = iconId
+    const exercise = module.lessons[0].blocks.at(-1) as { data: { publicTests?: Array<{ id: string; input: string; expectedOutput: string }> } }
+    exercise.data.publicTests = [{ id: uuid('50'), input: '2', expectedOutput: '4' }]
+    const corrected = validatePublicationCompatibility(document, { resolvedAssetIds: new Set([iconId]) })
+    expect(corrected.storageReady).toBe(true)
+    expect(corrected.findings.filter(({ code }) => code.startsWith('course.') || code.startsWith('quiz.') || code.startsWith('exercise.'))).toEqual([])
+  })
   it('reports Challenge and Project compatibility gaps', () => {
     expect(validatePublicationCompatibility(validChallengeDocument).findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['challenge.reward-incompatible', 'challenge.streak-contract-missing']))
     expect(validatePublicationCompatibility(validProjectDocument).findings.map(({ code }) => code)).toEqual(expect.arrayContaining(['project.runtime-missing', 'project.entrypoint-missing', 'project.validator-id-missing']))

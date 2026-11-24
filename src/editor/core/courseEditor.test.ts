@@ -122,6 +122,25 @@ describe('course editor history', () => {
     expect(state.document.title).toBe('Two')
   })
 
+  it('undoes and redoes quiz mode/options, public exercise cases, and Course icon together', () => {
+    let state = createCourseEditorState(createCourseDocument(ids()))
+    const changed = structuredClone(state.document)
+    changed.content.courseIconAssetId = 'b0000000-0000-4000-8000-000000000011'
+    const module = changed.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('fixture')
+    module.lessons[0].blocks.push(
+      { id: 'b0000000-0000-4000-8000-000000000012', schemaVersion: 1, type: 'quiz', data: { question: 'Choose', mode: 'multiple-correct', options: [{ id: 'b0000000-0000-4000-8000-000000000013', text: 'A', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000014', text: 'B', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000015', text: 'C', isCorrect: false }] } } as never,
+      { id: 'b0000000-0000-4000-8000-000000000016', schemaVersion: 1, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Solve' }] }] }, language: 'javascript', starterCode: '', publicTests: [{ id: 'b0000000-0000-4000-8000-000000000017', input: 'x', expectedOutput: 'y' }] } } as never,
+    )
+    state = courseEditorReducer(state, { type: 'commit', document: changed })
+    state = courseEditorReducer(state, { type: 'undo' })
+    expect(state.document.content.courseIconAssetId).toBeUndefined()
+    state = courseEditorReducer(state, { type: 'redo' })
+    expect(JSON.stringify(state.document)).toContain('multiple-correct')
+    expect(JSON.stringify(state.document)).toContain('expectedOutput')
+    expect(state.document.content.courseIconAssetId).toBe('b0000000-0000-4000-8000-000000000011')
+  })
+
   it('does not record selection and invalidates redo after a new edit', () => {
     const document = createCourseDocument(ids())
     let state = createCourseEditorState(document)

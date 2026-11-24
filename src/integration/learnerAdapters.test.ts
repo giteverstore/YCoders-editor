@@ -7,6 +7,47 @@ describe('pure learner adapters', () => {
   it('preserves section hierarchy and deterministic navigation', () => { const one = adaptCourse(fixtures.courseSectionsFixture), two = adaptCourse(fixtures.courseSectionsFixture); expect(one).toEqual(two); expect(one.ok && one.value.modules[0].organization).toBe('sections'); expect(one.ok && one.value.navigation.map(x => x.lessonId)).toEqual(['11000000-0000-4000-8000-000000000003', '11000000-0000-4000-8000-000000000004']) })
   it('preserves authored Course metadata without fixture-specific constants', () => { const fixture = structuredClone(fixtures.courseDirectFixture); fixture.document.content.estimatedMinutes = 73; fixture.document.content.learningOutcomes = ['Understand a generic published Course.', 'Apply its concepts.']; fixture.document.content.courseMetadata.prerequisites = ['A generic prerequisite']; const result = adaptCourse(fixture); expect(result).toMatchObject({ ok: true, value: { estimatedMinutes: 73, learningOutcomes: fixture.document.content.learningOutcomes, prerequisites: fixture.document.content.courseMetadata.prerequisites } }) })
   it('creates version-addressed image descriptors without private paths or URLs', () => { const result = adaptCourse(fixtures.courseImageFixture); expect(result.ok).toBe(true); if (!result.ok) return; const module = result.value.modules[0], block = module.lessons?.[0].blocks[1]; expect(block?.data).toMatchObject({ delivery: assetDeliveryDescriptor('v2', fixtures.courseImageFixture.document.id, 5, '12000000-0000-4000-8000-000000000001') }); expect(JSON.stringify(block)).not.toContain('editor-v2-published-assets') })
+  it('maps explicit Course quiz modes and learner-safe public exercise tests', () => {
+    const fixture = structuredClone(fixtures.courseDirectFixture)
+    const module = fixture.document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    const quizId = '12000000-0000-4000-8000-000000000021'
+    module.lessons[0].blocks.push(
+      { id: quizId, schemaVersion: 1, type: 'quiz', data: { question: 'Choose the values', mode: 'multiple-correct', explanation: 'A and B are correct.', options: [
+        { id: '12000000-0000-4000-8000-000000000022', text: 'A', isCorrect: true },
+        { id: '12000000-0000-4000-8000-000000000023', text: 'B', isCorrect: true },
+        { id: '12000000-0000-4000-8000-000000000024', text: 'C', isCorrect: false },
+      ] } },
+      { id: '12000000-0000-4000-8000-000000000028', schemaVersion: 1, type: 'quiz', data: { question: 'Choose one value', mode: 'single-correct', options: [
+        { id: '12000000-0000-4000-8000-000000000029', text: 'A', isCorrect: true },
+        { id: '12000000-0000-4000-8000-00000000002a', text: 'B', isCorrect: false },
+      ] } },
+      { id: '12000000-0000-4000-8000-000000000025', schemaVersion: 1, type: 'exercise', data: { prompt: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Double the input.' }] }] }, language: 'javascript', starterCode: 'console.log(0)', publicTests: [{ id: '12000000-0000-4000-8000-000000000026', input: '2', expectedOutput: '4' }, { id: '12000000-0000-4000-8000-000000000027', input: '3', expectedOutput: '6' }] } },
+    )
+    const result = adaptCourse(fixture)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const blocks = result.value.modules[0].lessons?.[0].blocks ?? []
+    const quiz = blocks.find(({ id }) => id === quizId)?.data as Record<string, unknown>
+    expect(quiz).toMatchObject({ mode: 'multiple-correct', selectionMode: 'multiple', correctOptionIds: ['12000000-0000-4000-8000-000000000022', '12000000-0000-4000-8000-000000000023'], explanation: 'A and B are correct.' })
+    expect(quiz.options).toEqual([{ id: '12000000-0000-4000-8000-000000000022', text: 'A' }, { id: '12000000-0000-4000-8000-000000000023', text: 'B' }, { id: '12000000-0000-4000-8000-000000000024', text: 'C' }])
+    expect(blocks.find(({ id }) => id === '12000000-0000-4000-8000-000000000028')?.data).toMatchObject({ mode: 'single-correct', selectionMode: 'single', correctOptionIds: ['12000000-0000-4000-8000-000000000029'] })
+    const exercise = blocks.find(({ id }) => id === '12000000-0000-4000-8000-000000000025')?.data
+    expect(exercise).toMatchObject({ publicTests: [{ id: '12000000-0000-4000-8000-000000000026', input: '2', expectedOutput: '4' }, { id: '12000000-0000-4000-8000-000000000027', input: '3', expectedOutput: '6' }] })
+    expect(JSON.stringify(result.value)).not.toContain('hiddenTests')
+  })
+  it('delivers Course icons by immutable version and permits legacy missing icons', () => {
+    const fixture = structuredClone(fixtures.courseDirectFixture)
+    const assetId = '12000000-0000-4000-8000-000000000031'
+    fixture.document.content.courseIconAssetId = assetId
+    fixture.assetManifest = [{ assetId, contentHash: `sha256:${'a'.repeat(64)}`, mimeType: 'image/png', width: 64, height: 64, byteLength: 100, publishedObjectPath: `editor-v2-published-assets/sha256/${'a'.repeat(64)}.png` }]
+    const result = adaptCourse(fixture)
+    expect(result).toMatchObject({ ok: true, value: { courseIcon: assetDeliveryDescriptor('v2', fixture.document.id, 3, assetId) } })
+    expect(JSON.stringify(result)).not.toContain('publishedObjectPath')
+    expect(adaptCourse(fixtures.courseDirectFixture)).toMatchObject({ ok: true, value: { courseIcon: null } })
+    fixture.assetManifest = []
+    expect(adaptCourse(fixture)).toMatchObject({ ok: false, errors: [expect.objectContaining({ code: 'course.icon-manifest-missing' })] })
+  })
   it('rejects removed lesson IDs, unsupported blocks, and implicit namespaces', () => { expect(adaptCourse(fixtures.courseRemovedLessonFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.lesson-id-removed' }] }); expect(adaptCourse(fixtures.courseUnsupportedBlockFixture)).toMatchObject({ ok: false, errors: [{ code: 'block.unsupported' }] }); expect(adaptCourse(fixtures.wrongNamespaceFixture as never)).toMatchObject({ ok: false, classification: 'invalid-publication' }) })
   it('rejects duplicate structural IDs and invalid navigation targets', () => { expect(adaptCourse(fixtures.courseDuplicateIdFixture)).toMatchObject({ ok: false, classification: 'invalid-publication' }); expect(adaptCourse(fixtures.courseInvalidNavigationFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.navigation-target-invalid' }] }) })
 

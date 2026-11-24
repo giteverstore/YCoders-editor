@@ -8,7 +8,8 @@ import { assertSafeAdminEnvironment } from './firebaseAdmin.server'
 import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository'
 import { CloudRepositoryError, type CloudDraftRecord, type CloudDraftRepository, type CloudDraftSummary } from './cloudDraft.types'
 import type { TokenVerifier } from './auth.server'
-import type { CourseDocument } from '../content/core/envelope'
+import type { ContentDocument } from '../content/core/envelope'
+import { validChallengeDocument, validProjectDocument } from '../content/fixtures/validDocuments'
 import { assertEmulatorTestEnvironment, EMULATOR_PROJECT_ID } from './emulatorSafety'
 
 const ids = () => { let index = 0; return () => `d0000000-0000-4000-8000-${String(++index).padStart(12, '0')}` }
@@ -16,10 +17,10 @@ const ids = () => { let index = 0; return () => `d0000000-0000-4000-8000-${Strin
 class MemoryCloudRepository implements CloudDraftRepository {
   records = new Map<string, CloudDraftRecord>()
   now = '2026-11-16T14:00:00.000Z'
-  async create(document: CourseDocument, actorUid: string) { if (this.records.has(document.id)) throw new CloudRepositoryError('duplicate', 'duplicate'); const record: CloudDraftRecord = { id: document.id, contentType: 'course', schemaVersion: '2.0.0', revision: 1, document: structuredClone(document), createdAt: this.now, updatedAt: this.now, createdBy: actorUid, updatedBy: actorUid }; this.records.set(record.id, record); return structuredClone(record) }
+  async create(document: ContentDocument, actorUid: string) { if (this.records.has(document.id)) throw new CloudRepositoryError('duplicate', 'duplicate'); const record: CloudDraftRecord = { id: document.id, contentType: document.contentType, schemaVersion: '2.0.0', revision: 1, document: structuredClone(document), createdAt: this.now, updatedAt: this.now, createdBy: actorUid, updatedBy: actorUid }; this.records.set(record.id, record); return structuredClone(record) }
   async get(id: string) { return structuredClone(this.records.get(id) ?? null) }
   async list(): Promise<CloudDraftSummary[]> { return [...this.records.values()].map(({ document, ...record }) => ({ ...record, title: document.title, slug: document.slug })) }
-  async save(id: string, document: CourseDocument, expectedRevision: number, actorUid: string) { const current = this.records.get(id); if (!current) throw new CloudRepositoryError('missing', 'not-found'); if (current.revision !== expectedRevision) throw new CloudRepositoryError('conflict', 'conflict', { expectedRevision, currentRevision: current.revision }); const record = { ...current, revision: current.revision + 1, document: structuredClone(document), updatedAt: this.now, updatedBy: actorUid }; this.records.set(id, record); return structuredClone(record) }
+  async save(id: string, document: ContentDocument, expectedRevision: number, actorUid: string) { const current = this.records.get(id); if (!current) throw new CloudRepositoryError('missing', 'not-found'); if (current.revision !== expectedRevision) throw new CloudRepositoryError('conflict', 'conflict', { expectedRevision, currentRevision: current.revision }); const record = { ...current, revision: current.revision + 1, document: structuredClone(document), updatedAt: this.now, updatedBy: actorUid }; this.records.set(id, record); return structuredClone(record) }
   async delete(id: string, expectedRevision: number) { const current = this.records.get(id); if (!current) throw new CloudRepositoryError('missing', 'not-found'); if (current.revision !== expectedRevision) throw new CloudRepositoryError('conflict', 'conflict', { expectedRevision, currentRevision: current.revision }); this.records.delete(id) }
 }
 
@@ -89,6 +90,22 @@ describe('draft API validation and repository behavior', () => {
     expect(saved.body.data).toMatchObject({ revision: 2, createdBy: 'creator', updatedBy: 'editor-uid' })
     expect((await handleDraftApi(request('DELETE', { id: document.id, body: { expectedRevision: 1 } }), { verifier, repository })).status).toBe(409)
     expect((await handleDraftApi(request('DELETE', { id: document.id, body: { expectedRevision: 2 } }), { verifier, repository })).status).toBe(200)
+  })
+  it('keeps Challenge and Project drafts unavailable through direct authenticated API routes', async () => {
+    const repository = new MemoryCloudRepository()
+    for (const document of [validChallengeDocument, validProjectDocument]) {
+      const created = await handleDraftApi(request('POST', { body: { document } }), { verifier, repository })
+      expect(created).toMatchObject({ status: 403, body: { error: { code: 'DOMAIN_WORK_IN_PROGRESS' } } })
+      const listed = await handleDraftApi(request('GET', { draftType: document.contentType }), { verifier, repository })
+      expect(listed).toMatchObject({ status: 403, body: { error: { code: 'DOMAIN_WORK_IN_PROGRESS' } } })
+
+      const existing = new MemoryCloudRepository()
+      await existing.create(document, 'seed')
+      const context = { verifier, repository: existing }
+      expect((await handleDraftApi(request('GET', { id: document.id }), context)).status).toBe(403)
+      expect((await handleDraftApi(request('PUT', { id: document.id, body: { document, expectedRevision: 1 } }), context)).status).toBe(403)
+      expect((await handleDraftApi(request('DELETE', { id: document.id, body: { expectedRevision: 1 } }), context)).status).toBe(403)
+    }
   })
   it('sanitizes unexpected errors', async () => {
     const repository = new MemoryCloudRepository(); repository.list = async () => { throw new Error('secret-project/service-account@example.com') }

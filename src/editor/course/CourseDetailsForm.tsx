@@ -2,6 +2,7 @@ import type { CourseDocument } from '../../content/core/envelope'
 import type { ValidationIssue } from '../../content/validation/validateContent'
 import { templateRegistry } from '../../content/templates/template.registry'
 import { updateCourse } from '../core/courseEditor.commands'
+import { AssetPicker, AuthenticatedAssetImage } from '../../assets/AssetPicker'
 
 type Props = { document: CourseDocument; issues: ValidationIssue[]; commit: (document: CourseDocument) => void }
 
@@ -20,6 +21,7 @@ export function CourseDetailsForm({ document, issues, commit }: Props) {
       <label className="field field--wide"><span>Summary</span><textarea rows={2} key={document.metadata.summary} defaultValue={document.metadata.summary} onBlur={(event) => commit(updateCourse(document, { metadata: { ...document.metadata, summary: event.target.value } }))} /></label>
       <label className="field"><span>Prerequisites</span><textarea rows={3} key={document.content.courseMetadata.prerequisites.join('\n')} defaultValue={document.content.courseMetadata.prerequisites.join('\n')} onBlur={(event) => commit(updateCourse(document, { content: { courseMetadata: { ...document.content.courseMetadata, prerequisites: event.target.value.split('\n').filter(Boolean) } } }))} /></label>
       <label className="field"><span>Topics</span><textarea rows={3} key={document.content.courseMetadata.topics.join('\n')} defaultValue={document.content.courseMetadata.topics.join('\n')} onBlur={(event) => commit(updateCourse(document, { content: { courseMetadata: { ...document.content.courseMetadata, topics: event.target.value.split('\n').filter(Boolean) } } }))} /></label>
+      <section className="field field--wide course-icon-field"><h3>Course icon</h3><p className="field-help">Shown on YCoders course cards and course pages. Use a square image (PNG, JPEG, or WebP, up to 2 MiB).</p>{document.content.courseIconAssetId ? <div className="course-icon-preview"><AuthenticatedAssetImage assetId={document.content.courseIconAssetId} alt={`${document.title} icon preview`} /><button type="button" onClick={() => commit(updateCourse(document, { content: { courseIconAssetId: undefined } }))}>Remove icon</button></div> : <p>No icon selected yet. Required for production-ready Course publication.</p>}<AssetPicker selected={document.content.courseIconAssetId} onSelect={(courseIconAssetId) => commit(updateCourse(document, { content: { courseIconAssetId } }))}/></section>
     </div>
   </div>
 }
