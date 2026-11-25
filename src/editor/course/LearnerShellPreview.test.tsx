@@ -9,7 +9,7 @@ describe('YCoders learner shell Preview', () => {
   it('renders the learner header, draft outline, active lesson, compiler, and result tabs', () => {
     const document = structuredClone(validCourseDocument), lessons = previewCourseLessons(document)
     const html = renderToStaticMarkup(<CoursePreview document={document} initialLessonId={lessons[0]?.lesson.id} onExit={vi.fn()} />)
-    for (const value of ['Simulated YCoders learner Course', 'YCoders', 'Lesson progress', 'Course outline', document.content.modules[0].title, 'aria-current="page"', lessons[0]?.lesson.title, 'Preview compiler', 'Output', 'Expected', 'Errors', 'Exit Preview / Edit']) expect(html).toContain(value)
+    for (const value of ['Simulated YCoders learner Course', 'YCoders', 'Lesson progress', 'Course outline', document.content.modules[0].title, 'aria-current="page"', lessons[0]?.lesson.title, 'Preview compiler', 'Output', 'Expected', 'Errors', 'Back to Editor']) expect(html).toContain(value)
   })
 
   it('derives module and lesson hierarchy and local navigation order from the draft', () => {

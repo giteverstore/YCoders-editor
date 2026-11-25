@@ -7,7 +7,7 @@ import { practiceLanguageIdSchema } from '../domains/practice/practice.execution
 
 const base = { id: uuidSchema, schemaVersion: z.literal(BLOCK_SCHEMA_VERSION) }
 const codeLanguageSchema = z.string().trim().min(1).max(40)
-const imagePresentation = { size: z.enum(['small', 'medium', 'large', 'full', 'custom']).optional(), customWidth: z.number().positive().max(1600).optional(), customUnit: z.enum(['px', '%']).optional(), alignment: z.enum(['left', 'center', 'right']).optional(), preserveAspectRatio: z.boolean().optional() }
+const imagePresentation = { size: z.enum(['small', 'medium', 'large', 'full', 'custom']).optional(), customWidth: z.number().positive().max(1600).optional(), customUnit: z.enum(['px', '%']).optional(), customHeight: z.number().positive().max(1200).optional(), heightUnit: z.enum(['auto', 'px']).optional(), objectFit: z.enum(['contain', 'cover']).optional(), alignment: z.enum(['left', 'center', 'right']).optional(), preserveAspectRatio: z.boolean().optional() }
 
 export const blockSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('richText'), data: z.object({ document: richTextDocumentSchema }).strict() }).strict(),

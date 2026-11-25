@@ -1,4 +1,4 @@
-import { Menu, PanelLeftClose, Sparkles, UserRound, X } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
@@ -6,8 +6,13 @@ import { domains, getDomainFromPath } from '../../lib/domains'
 import { getReleaseDomainStatus } from '../../lib/releaseDomains'
 import { useAuth } from '../../auth/authContext'
 
+export const STUDIO_SIDEBAR_PREFERENCE = 'ycoders-editor:sidebar-collapsed'
+export function readStudioSidebarPreference(storage?: Pick<Storage, 'getItem'>) { return storage?.getItem(STUDIO_SIDEBAR_PREFERENCE) === 'true' }
+export function writeStudioSidebarPreference(storage: Pick<Storage, 'setItem'>, collapsed: boolean) { storage.setItem(STUDIO_SIDEBAR_PREFERENCE, String(collapsed)) }
+
 export function StudioLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readStudioSidebarPreference(typeof window === 'undefined' ? undefined : window.localStorage))
   const location = useLocation()
   const auth = useAuth()
   const currentDomain = getDomainFromPath(location.pathname)
@@ -17,21 +22,22 @@ export function StudioLayout() {
     : 'Page not found'
 
   const closeSidebar = () => setIsSidebarOpen(false)
+  const toggleSidebar = () => setIsSidebarCollapsed((current) => { const next = !current; writeStudioSidebarPreference(window.localStorage, next); return next })
 
   return (
-    <div className="studio-shell">
+    <div className={`studio-shell ${isSidebarCollapsed ? 'studio-shell--sidebar-collapsed' : ''}`}>
       <a className="skip-link" href="#main-content">Skip to content</a>
       {isSidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={closeSidebar} />}
-      <aside className={`sidebar ${isSidebarOpen ? 'sidebar--open' : ''}`} aria-label="Studio navigation">
+      <aside className={`sidebar ${isSidebarOpen ? 'sidebar--open' : ''} ${isSidebarCollapsed ? 'sidebar--collapsed' : ''}`} aria-label="Studio navigation">
         <div className="brand">
           <span className="brand__mark"><Sparkles size={19} aria-hidden="true" /></span>
-          <span><strong>Ycoders</strong><small>Editor Studio</small></span>
+          <span className="brand__copy"><strong>Ycoders</strong><small>Editor Studio</small></span>
           <button className="icon-button sidebar__close" onClick={closeSidebar} aria-label="Close navigation"><X size={20} /></button>
         </div>
         <nav className="sidebar__nav">
           <p className="eyebrow">Workspace</p>
           {domains.map(({ icon: Icon, plural, slug }) => getReleaseDomainStatus(slug) === 'enabled' ? (
-            <NavLink key={slug} to={`/${slug}`} onClick={closeSidebar} className={({ isActive }) => `nav-link ${isActive ? 'nav-link--active' : ''}`}>
+            <NavLink key={slug} to={`/${slug}`} title={isSidebarCollapsed ? plural : undefined} onClick={closeSidebar} className={({ isActive }) => `nav-link ${isActive ? 'nav-link--active' : ''}`}>
               <Icon size={19} aria-hidden="true" />
               <span>{plural}</span>
             </NavLink>
@@ -42,7 +48,7 @@ export function StudioLayout() {
             </div>
           ))}
         </nav>
-        <div className="sidebar__footer"><PanelLeftClose size={17} aria-hidden="true" /><span>Studio foundation · E1</span></div>
+        <div className="sidebar__footer"><button type="button" className="icon-button" aria-label={isSidebarCollapsed ? 'Expand Studio sidebar' : 'Collapse Studio sidebar'} aria-expanded={!isSidebarCollapsed} onClick={toggleSidebar}>{isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button><span>Studio foundation · E1</span></div>
       </aside>
       <div className="workspace">
         <header className="topbar">

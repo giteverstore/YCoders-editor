@@ -13,6 +13,8 @@ const markSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('underline') }).strict(),
   z.object({ type: z.literal('code') }).strict(),
   linkMarkSchema,
+  z.object({ type: z.literal('fontFamily'), attrs: z.object({ family: z.enum(['sans', 'serif', 'mono']) }).strict() }).strict(),
+  z.object({ type: z.literal('fontSize'), attrs: z.object({ size: z.union([z.literal(12), z.literal(14), z.literal(16), z.literal(18), z.literal(20), z.literal(24), z.literal(28), z.literal(32), z.literal(36), z.literal(48)]) }).strict() }).strict(),
 ])
 
 type RichTextNodeInput = {
