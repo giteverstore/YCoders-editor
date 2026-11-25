@@ -55,6 +55,7 @@ export function CourseEditorPage({ source = 'local' }: { source?: DraftSource })
 
   return <div className="course-editor-page">
     <UnsavedChangesDialog open={navigationConfirmation.isOpen} onStay={navigationConfirmation.stay} onDiscard={navigationConfirmation.discard} />
+    <header className="editor-context-header"><div><span>Courses / {source === 'cloud' ? 'Cloud drafts' : 'Local drafts'}</span><h2>{state.document.title || 'Untitled course'}</h2></div><div><span className={source === 'cloud' ? 'cloud-badge' : 'local-badge'}>{source}</span><span className={`save-state ${persistence.isDirty ? 'dirty' : ''}`}>{persistence.isSaving ? 'Saving…' : persistence.isDirty ? 'Unsaved changes' : `Saved · r${persistence.revision ?? 'new'}`}</span></div></header>
     <div className="memory-warning"><AlertTriangle size={15} /><span><strong>{source === 'local' ? 'Local draft.' : 'Cloud draft.'}</strong> {source === 'local' ? 'Saved copies remain in this browser and device.' : `Revision ${persistence.revision ?? 'new'} is stored by the V2 draft API.${readOnly ? ' Your role has read-only access.' : ''}`}</span></div>
     <PublicationWorkflow contentId={state.document.id} contentType="course" title={state.document.title} source={source} revision={persistence.revision} isDirty={persistence.isDirty} />
     <div className="editor-commandbar">
