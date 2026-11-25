@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { validCourseDocument } from '../../content/fixtures/validDocuments'
-import { CoursePreview, PREVIEW_LEARNER_STATE, PREVIEW_SAFETY_BOUNDARIES, previewCourseLessons } from './CoursePreview'
+import { CoursePreview, PREVIEW_LEARNER_STATE, PREVIEW_PORTAL_TARGET, PREVIEW_SAFETY_BOUNDARIES, lockPreviewScroll, previewCourseLessons, previewPortalTarget } from './CoursePreview'
 
 vi.mock('../../assets/AssetPicker', () => ({ AuthenticatedAssetImage: ({ assetId, alt }: { assetId: string; alt: string }) => <img data-asset-id={assetId} alt={alt} />, ContentImage: ({ data }: { data: { alt: string } }) => <img alt={data.alt} /> }))
 
@@ -33,4 +33,6 @@ describe('YCoders learner shell Preview', () => {
     expect(learnerPane).toContain('Course')
     expect(learnerPane).toContain('AI')
   })
+
+  it('targets document.body and restores both body and root scroll locks', () => { const body = { style: { overflow: 'auto' } }, root = { style: { overflow: 'scroll' } }, documentLike = { body, documentElement: root }; expect(PREVIEW_PORTAL_TARGET).toBe('document.body'); expect(previewPortalTarget(documentLike as unknown as Document)).toBe(body); const restore = lockPreviewScroll(documentLike as unknown as Document); expect(body.style.overflow).toBe('hidden'); expect(root.style.overflow).toBe('hidden'); restore(); expect(body.style.overflow).toBe('auto'); expect(root.style.overflow).toBe('scroll') })
 })

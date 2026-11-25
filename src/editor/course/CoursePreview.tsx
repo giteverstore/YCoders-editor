@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { BookOpen, Bookmark, Braces, Check, ChevronDown, ChevronLeft, ChevronRight, Coins, Copy, Dumbbell, Flame, Lightbulb, Menu, Moon, PanelRightClose, Play, RotateCcw, Sparkles, UserRound } from 'lucide-react'
 import { AuthenticatedAssetImage, ContentImage } from '../../assets/AssetPicker'
 import { calloutVariant, courseLanguage } from '../../content/blocks/coursePresentation'
@@ -62,6 +63,9 @@ void CoursePreviewLegacy
 
 export const PREVIEW_LEARNER_STATE = Object.freeze({ streak: 0, coins: 0, bookmarked: false, compilerState: 'idle' as const })
 export const PREVIEW_SAFETY_BOUNDARIES = Object.freeze(['no-progress-writes', 'no-completion-writes', 'no-reward-writes', 'no-compiler-execution', 'no-ai-requests'])
+export const PREVIEW_PORTAL_TARGET = 'document.body'
+export function previewPortalTarget(documentLike: Pick<Document, 'body'>) { return documentLike.body }
+export function lockPreviewScroll(documentLike: Pick<Document, 'body' | 'documentElement'>) { const { body, documentElement: root } = documentLike, bodyOverflow = body.style.overflow, rootOverflow = root.style.overflow; body.style.overflow = 'hidden'; root.style.overflow = 'hidden'; return () => { body.style.overflow = bodyOverflow; root.style.overflow = rootOverflow } }
 export function toggleExpandedSet(current: Set<string>, id: string) { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }
 type CourseModule = CourseDocument['content']['modules'][number]
 type CourseLesson = Extract<CourseModule, { organization: 'lessons' }>['lessons'][number]
@@ -80,8 +84,8 @@ export function CoursePreview({ document, initialLessonId, onExit }: { document:
   const expected = exercise?.type === 'exercise' ? exercise.data.publicTests?.map((test) => test.expectedOutput).join('\n') : lesson?.blocks.find((block) => block.type === 'expectedOutput')?.data.value
   const completed = new Set(lessons.slice(0, Math.max(0, activeIndex)).map(({ lesson: item }) => item.id))
   const selectLesson = (index: number) => { setActiveIndex(index); setOutlineOpen(false); setWorkspace('course') }
-  useEffect(() => { const overflow = documentElement().style.overflow; documentElement().style.overflow = 'hidden'; return () => { documentElement().style.overflow = overflow } }, [])
-  return <div className={`course-preview-shell course-preview-shell--${viewport}`}>
+  useEffect(() => lockPreviewScroll(window.document), [])
+  const preview = <div className={`course-preview-shell course-preview-shell--${viewport}`} data-fullscreen-preview="true">
     <nav className="preview-viewports" aria-label="Editor Preview controls"><span>Editor Preview</span>{(['desktop', 'tablet', 'mobile'] as const).map((mode) => <button type="button" className={viewport === mode ? 'active' : ''} onClick={() => setViewport(mode)} key={mode}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}{onExit && <button type="button" onClick={onExit}>Back to Editor</button>}</nav>
     <section className="yc-preview" data-preview-viewport={viewport} aria-label="Simulated YCoders learner Course">
       <header className="yc-preview-topbar"><button type="button" className="yc-preview-menu" aria-label="Open Course outline" onClick={() => setOutlineOpen(true)}><Menu size={18} /></button><div className="yc-preview-brand"><span>Y</span><strong>YCoders</strong></div><div className="yc-preview-progress"><span>Lesson progress <b>{progress} of {lessons.length}</b></span><i><span style={{ width: lessons.length ? `${progress / lessons.length * 100}%` : '0%' }} /></i></div><div className="yc-preview-actions"><button type="button" aria-label="Bookmark lesson"><Bookmark size={17} /></button><span><Flame size={16} />{PREVIEW_LEARNER_STATE.streak}</span><span><Coins size={16} />{PREVIEW_LEARNER_STATE.coins}</span><button type="button" aria-label="Toggle theme preview"><Moon size={17} /></button><span className="yc-preview-avatar"><UserRound size={17} /></span></div></header>
@@ -91,11 +95,11 @@ export function CoursePreview({ document, initialLessonId, onExit }: { document:
       </div>
     </section>
   </div>
+  return typeof globalThis.document === 'undefined' ? preview : createPortal(preview, previewPortalTarget(globalThis.document))
 }
 
 function CourseOutlineLegacy({ document, lessons, activeIndex, completed, open, onClose, onSelect }: { document: CourseDocument; lessons: PreviewLesson[]; activeIndex: number; completed: Set<string>; open: boolean; onClose: () => void; onSelect: (index: number) => void }) { return <><aside className={`yc-preview-outline ${open ? 'is-open' : ''}`} aria-label="Course outline"><header>{document.content.courseIconAssetId ? <AuthenticatedAssetImage assetId={document.content.courseIconAssetId} alt={`${document.title} icon`} /> : <BookOpen size={22} />}<div><span>Course</span><strong>{document.title}</strong></div><button type="button" aria-label="Close Course outline" onClick={onClose}><ChevronLeft size={17} /></button></header><div className="yc-preview-outline-summary"><span>{lessons.length} lessons</span><span>{document.content.estimatedMinutes} min</span></div><nav>{document.content.modules.map((module) => <section key={module.id}><h3><ChevronDown size={14} />{module.title}</h3>{module.organization === 'sections' ? module.sections.map((section) => <div className="yc-preview-section" key={section.id}><h4>{section.title}</h4>{section.lessons.map((item) => { const index = lessons.findIndex(({ lesson }) => lesson.id === item.id); return <LessonNavButton key={item.id} title={item.title} index={index} active={index === activeIndex} completed={completed.has(item.id)} onSelect={onSelect} /> })}</div>) : module.lessons.map((item) => { const index = lessons.findIndex(({ lesson }) => lesson.id === item.id); return <LessonNavButton key={item.id} title={item.title} index={index} active={index === activeIndex} completed={completed.has(item.id)} onSelect={onSelect} /> })}</section>)}</nav></aside>{open && <button className="yc-preview-outline-backdrop" aria-label="Close Course outline" onClick={onClose} />}</> }
 void CourseOutlineLegacy
-function documentElement() { return window.document.documentElement }
 function CourseOutline({ document, lessons, activeIndex, completed, open, onClose, onSelect }: { document: CourseDocument; lessons: PreviewLesson[]; activeIndex: number; completed: Set<string>; open: boolean; onClose: () => void; onSelect: (index: number) => void }) {
   const [modulesOpen, setModulesOpen] = useState(() => new Set(document.content.modules.map(({ id }) => id)))
   const [sectionsOpen, setSectionsOpen] = useState(() => new Set(document.content.modules.flatMap((module) => module.organization === 'sections' ? module.sections.map(({ id }) => id) : [])))

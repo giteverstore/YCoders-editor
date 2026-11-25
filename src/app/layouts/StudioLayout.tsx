@@ -35,7 +35,7 @@ export function StudioLayout() {
           <button className="icon-button sidebar__close" onClick={closeSidebar} aria-label="Close navigation"><X size={20} /></button>
         </div>
         <nav className="sidebar__nav">
-          <p className="eyebrow">Workspace</p>
+          <div className="sidebar__workspace-heading"><p className="eyebrow">Workspace</p><button type="button" className="icon-button" title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={isSidebarCollapsed ? 'Expand Studio sidebar' : 'Collapse Studio sidebar'} aria-expanded={!isSidebarCollapsed} onClick={toggleSidebar}>{isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
           {domains.map(({ icon: Icon, plural, slug }) => getReleaseDomainStatus(slug) === 'enabled' ? (
             <NavLink key={slug} to={`/${slug}`} title={isSidebarCollapsed ? plural : undefined} onClick={closeSidebar} className={({ isActive }) => `nav-link ${isActive ? 'nav-link--active' : ''}`}>
               <Icon size={19} aria-hidden="true" />
@@ -48,7 +48,7 @@ export function StudioLayout() {
             </div>
           ))}
         </nav>
-        <div className="sidebar__footer"><button type="button" className="icon-button" aria-label={isSidebarCollapsed ? 'Expand Studio sidebar' : 'Collapse Studio sidebar'} aria-expanded={!isSidebarCollapsed} onClick={toggleSidebar}>{isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button><span>Studio foundation · E1</span></div>
+        <div className="sidebar__footer"><PanelLeftClose size={17} aria-hidden="true" /><span>Studio foundation · E1</span></div>
       </aside>
       <div className="workspace">
         <header className="topbar">
