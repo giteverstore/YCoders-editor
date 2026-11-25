@@ -5,12 +5,11 @@ import { calloutVariant, courseLanguage } from '../../content/blocks/coursePrese
 import type { ContentBlock } from '../../content/blocks/block.schemas'
 import type { CourseDocument } from '../../content/core/envelope'
 import { imageDisplayStyle, imagePresentation } from '../../content/blocks/imagePresentation'
-import { typographyFontStack, type TypographyFamily } from './TypographyMark'
 
 function RichNodes({ node }: { node: Record<string, unknown> }) {
   const type = node.type as string
   const children = (node.content as Record<string, unknown>[] | undefined)?.map((child, index) => <RichNodes key={index} node={child} />)
-  if (type === 'text') { let content: ReactNode = String(node.text ?? ''); for (const mark of (node.marks as Array<{ type: string; attrs?: { href?: string; family?: TypographyFamily; size?: number } }> | undefined) ?? []) { if (mark.type === 'bold') content = <strong>{content}</strong>; if (mark.type === 'italic') content = <em>{content}</em>; if (mark.type === 'underline') content = <u>{content}</u>; if (mark.type === 'code') content = <code>{content}</code>; if (mark.type === 'link') content = <a href={mark.attrs?.href} rel="noreferrer">{content}</a>; if (mark.type === 'fontFamily' && mark.attrs?.family) content = <span data-font-family={mark.attrs.family} style={{ fontFamily: typographyFontStack(mark.attrs.family) }}>{content}</span>; if (mark.type === 'fontSize' && mark.attrs?.size) content = <span data-font-size={mark.attrs.size} style={{ fontSize: `${mark.attrs.size}px` }}>{content}</span> }; return content }
+  if (type === 'text') { let content: ReactNode = String(node.text ?? ''); for (const mark of (node.marks as Array<{ type: string; attrs?: { href?: string } }> | undefined) ?? []) { if (mark.type === 'bold') content = <strong>{content}</strong>; if (mark.type === 'italic') content = <em>{content}</em>; if (mark.type === 'underline') content = <u>{content}</u>; if (mark.type === 'code') content = <code>{content}</code>; if (mark.type === 'link') content = <a href={mark.attrs?.href} rel="noreferrer">{content}</a> }; return content }
   if (type === 'paragraph') return <p>{children}</p>; if (type === 'heading') { const level = (node.attrs as { level: number }).level; return level === 2 ? <h2>{children}</h2> : level === 3 ? <h3>{children}</h3> : <h4>{children}</h4> }; if (type === 'bulletList') return <ul>{children}</ul>; if (type === 'orderedList') return <ol>{children}</ol>; if (type === 'listItem') return <li>{children}</li>; if (type === 'blockquote') return <blockquote>{children}</blockquote>; if (type === 'hardBreak') return <br />; return <>{children}</>
 }
 

@@ -8,7 +8,6 @@ import { richTextDocumentSchema } from '../../content/blocks/richText.schema'
 import { BLOCK_SCHEMA_VERSION } from '../../content/core/versions'
 import { validCourseDocument } from '../../content/fixtures/validDocuments'
 import { CoursePreview, toggleExpandedSet } from './CoursePreview'
-import { TYPOGRAPHY_FAMILIES, TYPOGRAPHY_SIZES } from './TypographyMark'
 
 vi.mock('../../auth/authContext', () => ({ useAuth: () => ({ role: 'SUPER_ADMIN', getIdToken: async () => 'test' }) }))
 vi.mock('../../assets/assetClient', () => ({ AssetClient: class {} }))
@@ -34,9 +33,9 @@ describe('fullscreen Preview and collapsible navigation', () => {
   it('stores the Studio icon-rail preference only in supplied local storage', () => { const values = new Map<string, string>(), storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) } }; writeStudioSidebarPreference(storage, true); expect(values.get(STUDIO_SIDEBAR_PREFERENCE)).toBe('true'); expect(readStudioSidebarPreference(storage)).toBe(true) })
 })
 
-describe('controlled rich typography contract', () => {
-  const formatted = { type: 'doc' as const, content: [{ type: 'paragraph' as const, content: [{ type: 'text' as const, text: 'Default ' }, { type: 'text' as const, text: 'selected phrase', marks: [{ type: 'fontFamily' as const, attrs: { family: 'serif' as const } }, { type: 'fontSize' as const, attrs: { size: 24 as const } }, { type: 'bold' as const }] }] }] }
-  it('accepts controlled range marks and leaves adjacent text unformatted', () => { const parsed = richTextDocumentSchema.parse(formatted); expect(parsed.content?.[0].content?.[0].marks).toBeUndefined(); expect(parsed.content?.[0].content?.[1].marks).toHaveLength(3) })
-  it('rejects unsupported font families, sizes, and arbitrary CSS attributes', () => { const unsafe = structuredClone(formatted) as unknown as { content: Array<{ content: Array<{ marks?: unknown[] }> }> }; unsafe.content[0].content[1].marks = [{ type: 'fontFamily', attrs: { family: 'Comic Sans', style: 'position:fixed' } }, { type: 'fontSize', attrs: { size: 17 } }]; expect(richTextDocumentSchema.safeParse(unsafe).success).toBe(false) })
-  it('uses the approved families/sizes and renders typography in Preview without author chrome', () => { expect(TYPOGRAPHY_FAMILIES).toEqual({ sans: 'YCoders Sans', serif: 'Serif', mono: 'Monospace' }); expect(TYPOGRAPHY_SIZES).toEqual([12,14,16,18,20,24,28,32,36,48]); const document = structuredClone(validCourseDocument); const module = document.content.modules[0]; if (module.organization !== 'lessons') throw new Error('fixture'); module.lessons[0].blocks = [{ id: '10000000-0000-4000-8000-000000000099', schemaVersion: BLOCK_SCHEMA_VERSION, type: 'richText', data: { document: formatted } }]; const html = renderToStaticMarkup(<CoursePreview document={document} />); expect(html).toContain('data-font-family="serif"'); expect(html).toContain('font-size:24px'); expect(html).not.toContain('Text formatting') })
+describe('fixed learner typography contract', () => {
+  const standard = { type: 'doc' as const, content: [{ type: 'paragraph' as const, content: [{ type: 'text' as const, text: 'Learner text', marks: [{ type: 'bold' as const }, { type: 'italic' as const }, { type: 'underline' as const }, { type: 'code' as const }] }] }] }
+  it('preserves the accepted inline formatting marks', () => { expect(richTextDocumentSchema.safeParse(standard).success).toBe(true) })
+  it('rejects deferred font family and font size marks', () => { for (const mark of [{ type: 'fontFamily', attrs: { family: 'serif' } }, { type: 'fontSize', attrs: { size: 24 } }]) expect(richTextDocumentSchema.safeParse({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Unsupported', marks: [mark] }] }] }).success).toBe(false) })
+  it('renders fixed learner typography without custom font metadata', () => { const document = structuredClone(validCourseDocument); const module = document.content.modules[0]; if (module.organization !== 'lessons') throw new Error('fixture'); module.lessons[0].blocks = [{ id: '10000000-0000-4000-8000-000000000099', schemaVersion: BLOCK_SCHEMA_VERSION, type: 'richText', data: { document: standard } }]; const html = renderToStaticMarkup(<CoursePreview document={document} />); for (const value of ['Learner text', '<strong>', '<em>', '<u>', '<code>']) expect(html).toContain(value); expect(html).not.toContain('data-font-family'); expect(html).not.toContain('data-font-size') })
 })

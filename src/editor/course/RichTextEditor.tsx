@@ -3,23 +3,19 @@ import Underline from '@tiptap/extension-underline'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Bold, Braces, Italic, Link2, List, ListOrdered, Quote, UnderlineIcon } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { richTextDocumentSchema, type RichTextDocument } from '../../content/blocks/richText.schema'
-import { FontFamilyMark, FontSizeMark, TYPOGRAPHY_FAMILIES, TYPOGRAPHY_SIZES, typographySelectionState } from './TypographyMark'
 
 type Props = { value: RichTextDocument; onCommit: (value: RichTextDocument) => void; label?: string }
 
 export function RichTextEditor({ value, onCommit, label = 'Rich text' }: Props) {
   const lastCommitted = useRef(JSON.stringify(value))
-  const [, refreshToolbar] = useState(0)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, horizontalRule: false, strike: false, link: false, underline: false }),
       Underline,
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'], HTMLAttributes: { target: null, rel: 'noopener noreferrer' } }),
-      FontFamilyMark,
-      FontSizeMark,
     ],
     content: value,
     editorProps: { attributes: { class: 'tiptap-surface', 'aria-label': label } },
@@ -31,8 +27,6 @@ export function RichTextEditor({ value, onCommit, label = 'Rich text' }: Props) 
         onCommit(parsed.data)
       }
     },
-    onSelectionUpdate: () => refreshToolbar((value) => value + 1),
-    onTransaction: () => refreshToolbar((value) => value + 1),
   })
 
   useEffect(() => {
@@ -45,7 +39,6 @@ export function RichTextEditor({ value, onCommit, label = 'Rich text' }: Props) 
   }, [editor, value])
 
   if (!editor) return null
-  const typography = typographySelectionState(editor)
   const link = () => {
     const previous = editor.getAttributes('link').href as string | undefined
     const href = window.prompt('Link URL (http, https, or mailto)', previous ?? 'https://')
@@ -64,10 +57,6 @@ export function RichTextEditor({ value, onCommit, label = 'Rich text' }: Props) 
   return (
     <div className="rich-editor">
       <div className="rich-toolbar" aria-label="Text formatting">
-        <select aria-label="Text style" value={editor.isActive('heading', { level: 2 }) ? '2' : editor.isActive('heading', { level: 3 }) ? '3' : '0'} onChange={(event) => { const level = Number(event.target.value); if (level === 0) editor.chain().focus().setParagraph().run(); else editor.chain().focus().toggleHeading({ level: level as 2 | 3 }).run() }}><option value="0">Paragraph</option><option value="2">Heading 2</option><option value="3">Heading 3</option></select>
-        <select aria-label="Font family" value={typography.family} onChange={(event) => editor.chain().focus().setMark('fontFamily', { family: event.target.value }).run()}>{typography.family === 'mixed' && <option value="mixed" disabled>Mixed</option>}{Object.entries(TYPOGRAPHY_FAMILIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
-        <select aria-label="Font size" value={typography.size} onChange={(event) => editor.chain().focus().setMark('fontSize', { size: Number(event.target.value) }).run()}>{typography.size === 'mixed' && <option value="mixed" disabled>Mixed</option>}{TYPOGRAPHY_SIZES.map((size) => <option value={size} key={size}>{size}px</option>)}</select>
-        <span className="rich-toolbar__divider" />
         <button type="button" className={editor.isActive('bold') ? 'active' : ''} onClick={() => editor.chain().focus().toggleBold().run()} aria-label="Bold"><Bold size={15} /></button>
         <button type="button" className={editor.isActive('italic') ? 'active' : ''} onClick={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic"><Italic size={15} /></button>
         <button type="button" className={editor.isActive('underline') ? 'active' : ''} onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline"><UnderlineIcon size={15} /></button>
@@ -76,6 +65,7 @@ export function RichTextEditor({ value, onCommit, label = 'Rich text' }: Props) 
         <button type="button" className={editor.isActive('bulletList') ? 'active' : ''} onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bullet list"><List size={15} /></button>
         <button type="button" className={editor.isActive('orderedList') ? 'active' : ''} onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list"><ListOrdered size={15} /></button>
         <button type="button" className={editor.isActive('blockquote') ? 'active' : ''} onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Blockquote"><Quote size={15} /></button>
+        <select aria-label="Text style" value={editor.isActive('heading', { level: 2 }) ? '2' : editor.isActive('heading', { level: 3 }) ? '3' : '0'} onChange={(event) => { const level = Number(event.target.value); if (level === 0) editor.chain().focus().setParagraph().run(); else editor.chain().focus().toggleHeading({ level: level as 2 | 3 }).run() }}><option value="0">Paragraph</option><option value="2">Heading 2</option><option value="3">Heading 3</option></select>
       </div>
       <EditorContent editor={editor} />
       <small className="field-help">Changes are added to history when this field loses focus.</small>
