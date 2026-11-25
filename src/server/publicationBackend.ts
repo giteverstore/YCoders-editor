@@ -13,6 +13,9 @@ import {
   type PublicationIdentity,
 } from '../publication/publicationContracts.js'
 import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository.js'
+import { CourseDeliveryService, DeliveryError } from './courseDelivery.js'
+import type { AdapterFinding } from '../integration/learnerAdapter.types.js'
+import { adaptCourse } from '../integration/learnerAdapters.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 export const V2_PUBLICATION_REQUEST_COLLECTION = 'editorV2PublicationRequests'
@@ -51,7 +54,34 @@ export class PublicationBackend {
   async versions(contentId: string): Promise<unknown[]> { const pointer = await this.pointer(contentId), snap = await this.pointerRef(contentId).collection('versions').orderBy('identity.publicationVersion', 'desc').get(); return snap.docs.map((doc) => this.summarizeVersion(doc.data() as Record<string, unknown>, pointer?.activeVersionNumber ?? null)) }
   async version(contentId: string, version: number): Promise<Record<string, unknown> | null> { const snap = await this.pointerRef(contentId).collection('versions').doc(String(version)).get(); return snap.exists ? snap.data() as Record<string, unknown> : null }
   async artifact(contentId: string, version: number): Promise<Uint8Array> { const record = await this.version(contentId, version); if (!record) throw new PublicationError('VERSION_NOT_FOUND', 'Publication version not found', 404); const [bytes] = await this.bucket.file(String(record.artifactPath)).download(); const digest = hashBytes(bytes); if (digest !== record.artifactHash) throw new PublicationError('ARTIFACT_CORRUPT', 'Publication artifact failed integrity verification', 503); return new Uint8Array(bytes) }
-  async versionDetail(contentId: string, version: number) { const record = await this.version(contentId, version); if (!record) return null; const pointer = await this.pointer(contentId); return { ...this.summarizeVersion(record, pointer?.activeVersionNumber ?? null), identity: record.identity, schemaVersion: record.schemaVersion, artifactHash: record.artifactHash, compatibilitySnapshot: record.compatibilitySnapshot } }
+  async versionDetail(contentId: string, version: number) {
+    const record = await this.version(contentId, version)
+    if (!record) return null
+    const pointer = await this.pointer(contentId)
+    const summary = this.summarizeVersion(record, pointer?.activeVersionNumber ?? null)
+    const snapshot = record.compatibilitySnapshot as ReturnType<typeof validatePublicationCompatibility> | undefined
+    if ((record.identity as PublicationIdentity).contentType !== 'course' || !snapshot || snapshot.learnerIntegrationReady || snapshot.findings?.length) return { ...summary, identity: record.identity, schemaVersion: record.schemaVersion, artifactHash: record.artifactHash, compatibilitySnapshot: snapshot }
+    const diagnostics = await this.courseAdapterDiagnostics(contentId, version)
+    const findings = diagnostics.findings.map(({ domain, severity, path, code, message, requiredAction }) => ({ domain, severity, path, code, explanation: message, requiredAction, evidence: 'confirmed-by-inspected-source' as const }))
+    const compatibilitySnapshot = { ...snapshot, learnerIntegrationReady: diagnostics.learnerIntegrationReady && snapshot.learnerRuntimeCompatible, findings: [...snapshot.findings, ...findings] }
+    return { ...summary, compatibilitySummary: { ...summary.compatibilitySummary, learnerIntegrationReady: compatibilitySnapshot.learnerIntegrationReady, findingCount: compatibilitySnapshot.findings.length }, identity: record.identity, schemaVersion: record.schemaVersion, artifactHash: record.artifactHash, compatibilitySnapshot }
+  }
+  async courseAdapterDiagnostics(contentId: string, version: number) {
+    const record = await this.version(contentId, version)
+    if (!record) throw new PublicationError('VERSION_NOT_FOUND', 'Publication version not found', 404)
+    const manifest = z.array(assetManifestEntrySchema).parse(record.assetManifest)
+    let classification = 'compatible', findings: AdapterFinding[] = []
+    try {
+      const delivered = await new CourseDeliveryService(this.firestore, this.bucket).exact(contentId, version)
+      findings = delivered.warnings
+    } catch (error) {
+      if (!(error instanceof DeliveryError) || error.code !== 'V2_ADAPTER_INCOMPATIBLE') throw error
+      const details = error.details as { classification?: string; errors?: AdapterFinding[]; warnings?: AdapterFinding[] } | undefined
+      classification = details?.classification ?? 'incompatible'
+      findings = [...(details?.errors ?? []), ...(details?.warnings ?? [])]
+    }
+    return { identity: record.identity, publicationVersion: version, artifactPath: record.artifactPath, artifactHash: record.artifactHash, assetManifest: manifest, classification, learnerIntegrationReady: classification === 'compatible' || classification === 'compatible-with-warnings', findings }
+  }
   async verifyIntegrity(contentId: string, version: number) { const record = await this.version(contentId, version); if (!record) throw new PublicationError('VERSION_NOT_FOUND', 'Publication version not found', 404); if ((record.identity as PublicationIdentity).contentId !== contentId || record.status !== 'READY') throw new PublicationError('VERSION_NOT_READY', 'Publication version is not eligible for activation', 409); const manifest = z.array(assetManifestEntrySchema).safeParse(record.assetManifest); if (!manifest.success) throw new PublicationError('MANIFEST_CORRUPT', 'Asset manifest structure is invalid', 503); await this.artifact(contentId, version); return { ok: true, version, artifactStatus: 'VERIFIED', assetCount: manifest.data.length, checkedAt: this.now().toISOString() } }
 
   async lifecycle(input: z.infer<typeof lifecycleInputSchema> & { contentId: string }, actorUid: string): Promise<LifecycleResult> {
@@ -90,7 +120,7 @@ export class PublicationBackend {
     if (draft.revision !== expectedDraftRevision) throw new PublicationError('DRAFT_CONFLICT', 'Draft revision changed', 409, { currentRevision: draft.revision })
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document), manifest = await this.planAssets(assets)
-    const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })
+    const compatibility = courseCompatibility(document, manifest, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const pointer = await this.pointer(contentId)
     if (pointer && !canTransition(pointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${pointer.state}`, 409)
     const previous = pointer?.activeVersionNumber ? await this.version(contentId, pointer.activeVersionNumber) : null
@@ -124,7 +154,7 @@ export class PublicationBackend {
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document)
     const manifest = await this.planAssets(assets)
-    const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })
+    const compatibility = courseCompatibility(document, manifest, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previousPointer = await this.pointer(input.contentId)
     if (previousPointer && !canTransition(previousPointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${previousPointer.state}`, 409)
     const previous = previousPointer?.activeVersionNumber ? await this.version(input.contentId, previousPointer.activeVersionNumber) : null
@@ -199,6 +229,15 @@ export class PublicationBackend {
   private async createImmutable(path: string, bytes: Uint8Array, contentType: string, expectedHash: string) { const file = this.bucket.file(path); try { await file.save(Buffer.from(bytes), { resumable: false, validation: 'crc32c', preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType, metadata: { sha256: expectedHash } } }) } catch { const [existing] = await file.download().catch(() => { throw new PublicationError('IMMUTABLE_WRITE_FAILED', 'Immutable object could not be created', 503) }); if (hashBytes(existing) !== expectedHash) throw new PublicationError('IMMUTABLE_COLLISION', 'Immutable object path contains different bytes', 503) } }
   private summarizeVersion(record: Record<string, unknown>, activeVersion: number | null) { const identity = record.identity as PublicationIdentity, source = record.source as { draftRevision: number; documentVersion: number }, manifest = Array.isArray(record.assetManifest) ? record.assetManifest : []; const compatibility = record.compatibilitySnapshot as { schemaValid?: boolean; storageReady?: boolean; learnerRuntimeCompatible?: boolean; learnerIntegrationReady?: boolean; findings?: unknown[] } | undefined; return { identity, publicationVersion: identity.publicationVersion, publishedAt: record.publishedAt, publishedBy: record.publishedBy, sourceDraftRevision: source.draftRevision, sourceDocumentVersion: source.documentVersion, documentHash: record.documentHash, assetManifestHash: record.assetManifestHash, assetCount: manifest.length, compatibilitySummary: { schemaValid: compatibility?.schemaValid ?? false, storageReady: compatibility?.storageReady ?? false, learnerRuntimeCompatible: compatibility?.learnerRuntimeCompatible ?? false, learnerIntegrationReady: compatibility?.learnerIntegrationReady ?? false, findingCount: compatibility?.findings?.length ?? 0 }, active: identity.publicationVersion === activeVersion, artifactStatus: record.status } }
   private pointerRef(contentId: string) { return this.firestore.collection(V2_PUBLICATION_COLLECTION).doc(contentId) }
+}
+
+export function courseCompatibility(document: ContentDocument, manifest: Manifest, compatibility: ReturnType<typeof validatePublicationCompatibility>): ReturnType<typeof validatePublicationCompatibility> {
+  if (document.contentType !== 'course' || !compatibility.schemaValid) return compatibility
+  const adapted = adaptCourse({ identity: { namespace: 'v2', contentType: 'course', contentId: document.id, publicationVersion: 1 }, document, assetManifest: manifest })
+  const adapterFindings = adapted.ok ? adapted.warnings : [...adapted.errors, ...adapted.warnings]
+  const findings = [...compatibility.findings, ...adapterFindings.map(({ domain, severity, path, code, message, requiredAction }) => ({ domain, severity, path, code, explanation: message, requiredAction, evidence: 'confirmed-by-inspected-source' as const }))]
+  const ready = adapted.ok && compatibility.learnerRuntimeCompatible && !findings.some(({ severity }) => severity === 'error')
+  return { ...compatibility, learnerIntegrationReady: ready, findings }
 }
 
 export const hashBytes = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`

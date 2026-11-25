@@ -48,6 +48,7 @@ export async function runV2AdminRouter(
       if (path.length === 3) return handlers.publication(request, response, contentId, 'versions')
       if (path.length === 4) return handlers.publication(request, response, contentId, 'versions', path[3])
       if (path.length === 5 && path[4] === 'integrity') return handlers.publication(request, response, contentId, 'integrity', path[3])
+      if (path.length === 5 && path[4] === 'diagnostics') return handlers.publication(request, response, contentId, 'diagnostics', path[3])
     }
   }
 

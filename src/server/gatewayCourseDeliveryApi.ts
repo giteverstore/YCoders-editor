@@ -10,7 +10,7 @@ export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryReq
   try {
     const principal = await dependencies.verifier.verify({ authorization: request.authorization, method: request.method, path: request.path, correlationId: request.correlationId })
     if (request.kind === 'catalog' && request.method !== 'GET') return failure(405, 'V2_METHOD_NOT_ALLOWED', 'Use GET for the V2 Course catalog', principal.correlationId)
-    if (request.kind === 'catalog') return success(await dependencies.service.catalog(normalizeCourseCatalogLimit(request.limit)), 'catalog', principal.correlationId)
+    if (request.kind === 'catalog') return success(await dependencies.service.catalog(normalizeCourseCatalogLimit(request.limit), principal.correlationId), 'catalog', principal.correlationId)
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return failure(422, 'V2_CONTENT_NOT_FOUND', 'A valid explicit V2 Course ID is required', principal.correlationId)
     if (process.env.VERCEL_ENV === 'preview' && request.kind === 'active' && request.contentId === '00000000-0000-4000-8000-000000000000') {
       await dependencies.service.backendReadinessProbe()
@@ -25,7 +25,13 @@ export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryReq
     return { status: 200, headers: { ...deliveryCacheHeaders('asset'), 'Content-Type': asset.contentType, 'X-Content-Type-Options': 'nosniff', 'Content-Length': String(asset.bytes.length), 'X-Correlation-Id': principal.correlationId }, bytes: asset.bytes }
   } catch (error) {
     if (error instanceof GatewayServiceAuthError) return failure(error.status, error.code, error.message, request.correlationId)
-    if (error instanceof DeliveryError) return failure(error.status, error.code, error.message, request.correlationId, error.details)
+    if (error instanceof DeliveryError) {
+      if (error.code === 'V2_ADAPTER_INCOMPATIBLE') {
+        const details = error.details as { errors?: Array<{ code: string; path: string }> } | undefined
+        console.warn('v2_gateway.adapter_incompatible', { contentId: request.contentId ?? null, publicationVersion: request.version ?? null, correlationId: request.correlationId ?? null, findings: details?.errors?.map(({ code, path }) => ({ code, path })) ?? [] })
+      }
+      return failure(error.status, error.code, error.message, request.correlationId)
+    }
     if (error instanceof z.ZodError) return failure(503, 'V2_INTEGRITY_FAILURE', 'V2 Course data failed integrity validation', request.correlationId)
     const classified = error as { name?: unknown; code?: unknown }
     console.error('v2_gateway.backend_failure', { name: typeof classified?.name === 'string' ? classified.name : 'Error', code: typeof classified?.code === 'string' || typeof classified?.code === 'number' ? classified.code : 'unknown' })

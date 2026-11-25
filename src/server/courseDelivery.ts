@@ -28,18 +28,27 @@ export class CourseDeliveryService {
     if (!isActivelyDiscoverable(value.state, value.visibility) || !value.activeVersionNumber) throw new DeliveryError('V2_NOT_DISCOVERABLE', 'V2 Course is not available through active discovery', 404)
     return this.exact(contentId, value.activeVersionNumber)
   }
-  async catalog(requestedLimit = DEFAULT_COURSE_CATALOG_LIMIT): Promise<CourseCatalogEnvelope> {
+  async catalog(requestedLimit = DEFAULT_COURSE_CATALOG_LIMIT, correlationId?: string): Promise<CourseCatalogEnvelope> {
     const limit = normalizeCourseCatalogLimit(requestedLimit)
     const snapshot = await this.firestore.collection(V2_PUBLICATION_COLLECTION)
       .where('contentType', '==', 'course').where('state', '==', 'published').where('visibility', '==', 'public')
       .orderBy('updatedAt', 'desc').orderBy(FieldPath.documentId(), 'asc').limit(limit).get()
-    const items = await Promise.all(snapshot.docs.map(async (pointer) => {
+    const candidates = await Promise.all(snapshot.docs.map(async (pointer) => {
       const value = pointer.data() as { contentId?: unknown; activeVersionNumber?: unknown; updatedAt?: unknown }
       const contentId = typeof value.contentId === 'string' ? value.contentId : pointer.id
       if (!uuidSchema.safeParse(contentId).success || !Number.isSafeInteger(value.activeVersionNumber) || Number(value.activeVersionNumber) < 1 || typeof value.updatedAt !== 'string') throw new DeliveryError('V2_INTEGRITY_FAILURE', 'Public Course pointer is invalid', 503)
-      const delivered = await this.exact(contentId, Number(value.activeVersionNumber)), course = delivered.course as LearnerCourse
-      return { contentId, publicationVersion: delivered.publicationVersion, title: course.title, description: course.description, language: course.language, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, courseIcon: course.courseIcon, releasedAt: value.updatedAt }
+      const publicationVersion = Number(value.activeVersionNumber)
+      try {
+        const delivered = await this.exact(contentId, publicationVersion), course = delivered.course as LearnerCourse
+        return { contentId, publicationVersion: delivered.publicationVersion, title: course.title, description: course.description, language: course.language, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, courseIcon: course.courseIcon, releasedAt: value.updatedAt }
+      } catch (error) {
+        if (!(error instanceof DeliveryError) || error.code !== 'V2_ADAPTER_INCOMPATIBLE') throw error
+        const details = error.details as { errors?: AdapterFinding[] } | undefined
+        console.warn('v2_gateway.catalog_incompatible', { contentId, publicationVersion, correlationId: correlationId ?? null, findings: details?.errors?.map(({ code, path }) => ({ code, path })) ?? [] })
+        return null
+      }
     }))
+    const items = candidates.filter((item): item is NonNullable<typeof item> => item !== null)
     return { namespace: 'v2', contentType: 'course', items, page: { limit, count: items.length } }
   }
   async backendReadinessProbe(): Promise<void> {

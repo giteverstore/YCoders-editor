@@ -3,7 +3,7 @@ import { uuidSchema } from '../content/core/identifiers.js'
 import { authenticateAdmin, AuthenticationError, AuthorizationError, type TokenVerifier } from './auth.server.js'
 import { lifecycleInputSchema, PublicationBackend, PublicationError, publicationInputSchema, publicationPreparationInputSchema } from './publicationBackend.js'
 
-type Request = { method: string; authorization?: string; contentId?: string; version?: string; action?: 'prepare' | 'publish' | 'versions' | 'integrity' | 'release' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'; body?: unknown }
+type Request = { method: string; authorization?: string; contentId?: string; version?: string; action?: 'prepare' | 'publish' | 'versions' | 'integrity' | 'diagnostics' | 'release' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'; body?: unknown }
 type Dependencies = { verifier: TokenVerifier; backend: PublicationBackend }
 type Result = { status: number; body: { ok: boolean; data?: unknown; error?: { code: string; message: string; details?: unknown } } }
 
@@ -11,6 +11,7 @@ export async function handlePublicationApi(request: Request, dependencies: Depen
   try {
     const permission = request.method === 'GET' ? 'publication:read' : 'publication:publish'
     const actor = await authenticateAdmin(request.authorization, permission, dependencies.verifier)
+    if (request.action === 'diagnostics' && !['CONTENT_ADMIN', 'SUPER_ADMIN'].includes(actor.role)) return fail(403, 'PERMISSION_DENIED', 'Content Admin access is required')
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return fail(422, 'INVALID_ID', 'Publication content ID must be a UUID')
     const contentType = await dependencies.backend.contentType(request.contentId)
     if (contentType === 'challenge' || contentType === 'project') return fail(403, 'DOMAIN_WORK_IN_PROGRESS', 'This content domain is not available in the current release')
@@ -18,6 +19,7 @@ export async function handlePublicationApi(request: Request, dependencies: Depen
     if (request.method === 'POST' && request.action === 'publish') { const input = publicationInputSchema.safeParse(request.body); if (!input.success) return invalid(input.error); return ok(await dependencies.backend.publish({ contentId: request.contentId, ...input.data }, actor.uid), 201) }
     if (request.method === 'POST' && ['release', 'rollback', 'unpublish', 'republish', 'disable', 'enable', 'archive'].includes(request.action ?? '')) { const input = lifecycleInputSchema.safeParse({ ...(request.body as object), operation: request.action }); if (!input.success) return invalid(input.error); return ok(await dependencies.backend.lifecycle({ contentId: request.contentId, ...input.data }, actor.uid)) }
     if (request.method === 'GET' && request.action === 'integrity' && request.version) { const version = Number(request.version); if (!Number.isSafeInteger(version) || version < 1) return fail(422, 'INVALID_VERSION', 'Publication version must be a positive integer'); return ok(await dependencies.backend.verifyIntegrity(request.contentId, version)) }
+    if (request.method === 'GET' && request.action === 'diagnostics' && request.version) { const version = Number(request.version); if (!Number.isSafeInteger(version) || version < 1) return fail(422, 'INVALID_VERSION', 'Publication version must be a positive integer'); return ok(await dependencies.backend.courseAdapterDiagnostics(request.contentId, version)) }
     if (request.method === 'GET' && request.action === 'versions' && request.version) { const version = Number(request.version); if (!Number.isSafeInteger(version) || version < 1) return fail(422, 'INVALID_VERSION', 'Publication version must be a positive integer'); const record = await dependencies.backend.versionDetail(request.contentId, version); return record ? ok(record) : fail(404, 'VERSION_NOT_FOUND', 'Publication version not found') }
     if (request.method === 'GET' && request.action === 'versions') return ok(await dependencies.backend.versions(request.contentId))
     if (request.method === 'GET' && !request.action) { const pointer = await dependencies.backend.pointer(request.contentId); return pointer ? ok(pointer) : fail(404, 'PUBLICATION_NOT_FOUND', 'Publication pointer not found') }

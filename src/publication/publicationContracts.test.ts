@@ -3,11 +3,19 @@ import { adminRoles } from '../auth/permissions'
 import type { ContentDocument } from '../content/core/envelope'
 import { validChallengeDocument, validCourseDocument, validPracticeDocument, validProjectDocument } from '../content/fixtures/validDocuments'
 import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validatePublicationCompatibility } from './publicationContracts'
+import { courseCompatibility } from '../server/publicationBackend'
 
 const hash = (c = 'a') => `sha256:${c.repeat(64)}`
 const uuid = (last: string) => `a0000000-0000-4000-8000-${last.padStart(12, '0')}`
 
 describe('final publication contracts', () => {
+  it('surfaces adapter findings in Course readiness instead of false with no findings', () => {
+    const document = structuredClone(validCourseDocument)
+    document.content.courseIconAssetId = uuid('9')
+    const report = courseCompatibility(document, [], validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('9')]) }))
+    expect(report.learnerIntegrationReady).toBe(false)
+    expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'course.icon-manifest-missing', path: '$.content.courseIconAssetId' })]))
+  })
   it('makes namespace part of historical identity', () => {
     expect(publicationIdentitySchema.parse({ namespace: 'v2', contentType: 'course', contentId: validCourseDocument.id, publicationVersion: 1 }).namespace).toBe('v2')
     expect(publicationIdentitySchema.safeParse({ contentType: 'course', contentId: validCourseDocument.id, publicationVersion: 1 }).success).toBe(false)

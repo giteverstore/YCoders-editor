@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CourseDeliveryService, DEFAULT_COURSE_CATALOG_LIMIT, MAX_COURSE_CATALOG_LIMIT, normalizeCourseCatalogLimit } from './courseDelivery'
+import { CourseDeliveryService, DeliveryError, DEFAULT_COURSE_CATALOG_LIMIT, MAX_COURSE_CATALOG_LIMIT, normalizeCourseCatalogLimit } from './courseDelivery'
 import { handleGatewayCourseDeliveryApi } from './gatewayCourseDeliveryApi'
 
 const releasedA = '10000000-0000-4000-8000-000000000001'
@@ -43,13 +43,28 @@ describe('released Course catalog', () => {
     expect((await service.catalog(1)).page).toEqual({ limit: 1, count: 1 })
   })
 
+  it('omits an incompatible Course while preserving valid discovery and logs safe finding codes', async () => {
+    const service = new CourseDeliveryService(firestore() as never, {} as never)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => {
+      if (contentId === releasedA) throw new DeliveryError('V2_ADAPTER_INCOMPATIBLE', 'Incompatible', 422, { errors: [{ code: 'asset.manifest-missing', path: '$.private.path' }] })
+      return { namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: 'Beta', description: '', language: 'javascript', difficulty: 'beginner', estimatedMinutes: 1, courseIcon: null } }
+    })
+    try {
+      const catalog = await service.catalog(10, 'catalog-correlation')
+      expect(catalog.items.map(({ contentId }) => contentId)).toEqual([releasedB])
+      expect(warning).toHaveBeenCalledWith('v2_gateway.catalog_incompatible', { contentId: releasedA, publicationVersion: 2, correlationId: 'catalog-correlation', findings: [{ code: 'asset.manifest-missing', path: '$.private.path' }] })
+      await expect(service.exact(releasedA, 2)).rejects.toMatchObject({ code: 'V2_ADAPTER_INCOMPATIBLE', status: 422 })
+    } finally { warning.mockRestore() }
+  })
+
   it('exposes a service-authenticated read-only gateway route without Editor admin authorization', async () => {
     const catalog = vi.fn(async () => ({ namespace: 'v2', contentType: 'course', items: [], page: { limit: 24, count: 0 } }))
     const verifier = { verify: vi.fn(async () => ({ serviceId: 'ycoders-learner-gateway', environment: 'production', correlationId: 'catalog-request' })) }
     const request = { authorization: 'ServiceAssertion signed', correlationId: 'catalog-request', method: 'GET', path: '/api/v2/gateway/courses', kind: 'catalog' as const }
     const result = await handleGatewayCourseDeliveryApi(request, { verifier, service: { catalog } as never })
     expect(result).toMatchObject({ status: 200, headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }, body: { data: { items: [], page: { limit: 24, count: 0 } } } })
-    expect(catalog).toHaveBeenCalledWith(24)
+    expect(catalog).toHaveBeenCalledWith(24, 'catalog-request')
     expect(await handleGatewayCourseDeliveryApi({ ...request, method: 'POST' }, { verifier, service: { catalog } as never })).toMatchObject({ status: 405, body: { error: { code: 'V2_METHOD_NOT_ALLOWED' } } })
   })
 })
