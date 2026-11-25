@@ -7,13 +7,14 @@ import { practiceLanguageIdSchema } from '../domains/practice/practice.execution
 
 const base = { id: uuidSchema, schemaVersion: z.literal(BLOCK_SCHEMA_VERSION) }
 const codeLanguageSchema = z.string().trim().min(1).max(40)
+const imagePresentation = { size: z.enum(['small', 'medium', 'large', 'full', 'custom']).optional(), customWidth: z.number().positive().max(1600).optional(), customUnit: z.enum(['px', '%']).optional(), alignment: z.enum(['left', 'center', 'right']).optional(), preserveAspectRatio: z.boolean().optional() }
 
 export const blockSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('richText'), data: z.object({ document: richTextDocumentSchema }).strict() }).strict(),
   z.object({ ...base, type: z.literal('image'), data: z.union([
-    z.object({ assetId: uuidSchema, alt: z.string().trim().min(1).max(300), caption: z.string().max(500).optional() }).strict(),
-    z.object({ src: z.string().url().refine((url) => ['http:', 'https:'].includes(new URL(url).protocol)), alt: z.string().trim().min(1).max(300), caption: z.string().max(500).optional() }).strict(),
-  ]) }).strict(),
+    z.object({ assetId: uuidSchema, alt: z.string().trim().min(1).max(300), caption: z.string().max(500).optional(), ...imagePresentation }).strict(),
+    z.object({ src: z.string().url().refine((url) => ['http:', 'https:'].includes(new URL(url).protocol)), alt: z.string().trim().min(1).max(300), caption: z.string().max(500).optional(), ...imagePresentation }).strict(),
+  ]).superRefine((value, context) => { if (value.size === 'custom' && value.customUnit === '%' && value.customWidth !== undefined && value.customWidth > 100) context.addIssue({ code: 'custom', path: ['customWidth'], message: 'Percentage width cannot exceed 100' }) }) }).strict(),
   z.object({ ...base, type: z.literal('code'), data: z.object({ language: codeLanguageSchema, code: z.string().max(50_000), filename: z.string().max(200).optional() }).strict() }).strict(),
   z.object({ ...base, type: z.literal('callout'), data: z.object({ tone: z.enum(['info', 'tip', 'warning', 'danger']), title: z.string().max(160).optional(), content: richTextDocumentSchema }).strict() }).strict(),
   z.object({ ...base, type: z.literal('divider'), data: z.object({ style: z.enum(['solid', 'dashed']).default('solid') }).strict() }).strict(),

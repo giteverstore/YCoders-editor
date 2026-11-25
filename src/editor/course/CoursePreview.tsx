@@ -4,6 +4,7 @@ import { AuthenticatedAssetImage, ContentImage } from '../../assets/AssetPicker'
 import { calloutVariant, courseLanguage } from '../../content/blocks/coursePresentation'
 import type { ContentBlock } from '../../content/blocks/block.schemas'
 import type { CourseDocument } from '../../content/core/envelope'
+import { imageDisplayWidth, imagePresentation } from '../../content/blocks/imagePresentation'
 
 function RichNodes({ node }: { node: Record<string, unknown> }) {
   const type = node.type as string
@@ -41,7 +42,7 @@ function QuizPreview({ block }: { block: Extract<ContentBlock, { type: 'quiz' }>
 function PreviewBlock({ block }: { block: ContentBlock }) {
   switch (block.type) {
     case 'richText': return <section className="learner-reading content-section"><RichNodes node={block.data.document as unknown as Record<string, unknown>} /></section>
-    case 'image': return <figure className="learner-image content-section"><ContentImage data={block.data} />{block.data.caption ? <figcaption>{block.data.caption}</figcaption> : null}</figure>
+    case 'image': { const presentation = imagePresentation(block.data); return <figure className={`learner-image learner-image--${presentation.alignment} content-section`} style={{ maxWidth: imageDisplayWidth(block.data) }}><ContentImage data={block.data} />{block.data.caption ? <figcaption>{block.data.caption}</figcaption> : null}</figure> }
     case 'code': return <CodeCard {...block.data} />
     case 'callout': { const variant = calloutVariant(block.data.tone); return <aside className={`learner-callout learner-callout--${block.data.tone} content-section`}><span aria-hidden="true">{variant.icon}</span><div><strong>{block.data.title || variant.label}</strong><RichNodes node={block.data.content as unknown as Record<string, unknown>} /></div></aside> }
     case 'divider': return <hr className={block.data.style === 'dashed' ? 'is-dashed' : ''} />
