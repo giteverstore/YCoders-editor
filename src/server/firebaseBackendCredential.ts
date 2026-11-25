@@ -9,9 +9,9 @@ const STAGING_PROJECT_NUMBER = '417214322239'
 const STAGING_EDITOR_PROJECT_ID = 'prj_1rpww81OiuVkWJwyXlbggmKCFoWl'
 const PRODUCTION_PROJECT = 'mi-tutora-pro'
 const PRODUCTION_PROJECT_NUMBER = '196429461457'
-const PRODUCTION_EDITOR_PROJECT_ID = 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq'
+const PRODUCTION_EDITOR_PROJECT_ID = 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm'
 const STAGING_EDITOR_PROVIDER = 'editor-preview'
-const PRODUCTION_EDITOR_PROVIDER = 'vercel-admin-production'
+const PRODUCTION_EDITOR_PROVIDER = 'vercel-editor-production'
 const WIF_POOL = 'ai-tutor-vercel'
 const VERCEL_OWNER = 'avinashabbigeris-projects'
 const VERCEL_TEAM_ID = 'team_JWeTI30xjnERJbMpLUkgTpzV'
@@ -69,7 +69,7 @@ export function createFirebaseBackendWifCredential(
   return {
     async getAccessToken(): Promise<GoogleOAuthAccessToken> {
       const result = await impersonated.getAccessToken()
-      if (!result.token) throw new FirebaseBackendCredentialError('Editor staging backend access token is unavailable')
+      if (!result.token) throw new FirebaseBackendCredentialError('Editor backend access token is unavailable')
       return { access_token: result.token, expires_in: 540 }
     },
   }
@@ -100,7 +100,7 @@ export async function verifiedEditorOidcToken(source: () => Promise<string>, env
   const mode = String(environment.FIREBASE_BACKEND_AUTH_MODE ?? '')
   const production = mode === 'production-wif'
   const projectId = production ? PRODUCTION_EDITOR_PROJECT_ID : STAGING_EDITOR_PROJECT_ID
-  const projectName = production ? 'ycoders-admin' : 'ycoders-editor-staging'
+  const projectName = production ? 'ycoders-editor' : 'ycoders-editor-staging'
   const deployment = production ? 'production' : 'preview'
   const expectedIssuer = `https://oidc.vercel.com/${VERCEL_OWNER}`
   const expectedAudience = `https://vercel.com/${VERCEL_OWNER}`

@@ -9,13 +9,13 @@ const base = {
   EDITOR_FIREBASE_SERVICE_ACCOUNT_EMAIL: 'ycoders-editor-staging@ycoders-v2-staging.iam.gserviceaccount.com',
 } as NodeJS.ProcessEnv
 const production = {
-  VERCEL_ENV: 'production', VERCEL_PROJECT_ID: 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', FIREBASE_BACKEND_AUTH_MODE: 'production-wif',
+  VERCEL_ENV: 'production', VERCEL_PROJECT_ID: 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', FIREBASE_BACKEND_AUTH_MODE: 'production-wif',
   FIREBASE_ADMIN_PROJECT_ID: 'mi-tutora-pro', FIREBASE_STORAGE_BUCKET: 'mi-tutora-pro-admin-content',
-  EDITOR_FIREBASE_WIF_AUDIENCE: '//iam.googleapis.com/projects/196429461457/locations/global/workloadIdentityPools/ai-tutor-vercel/providers/vercel-admin-production',
+  EDITOR_FIREBASE_WIF_AUDIENCE: '//iam.googleapis.com/projects/196429461457/locations/global/workloadIdentityPools/ai-tutor-vercel/providers/vercel-editor-production',
   EDITOR_FIREBASE_SERVICE_ACCOUNT_EMAIL: 'ycoders-admin-runtime@mi-tutora-pro.iam.gserviceaccount.com',
 } as NodeJS.ProcessEnv
-function oidcToken(project: string, projectId: string, environment: string) {
-  const claims = { iss: 'https://oidc.vercel.com/avinashabbigeris-projects', aud: 'https://vercel.com/avinashabbigeris-projects', sub: `owner:avinashabbigeris-projects:project:${project}:environment:${environment}`, owner: 'avinashabbigeris-projects', owner_id: 'team_JWeTI30xjnERJbMpLUkgTpzV', project, project_id: projectId, environment }
+function oidcToken(project: string, projectId: string, environment: string, overrides: Record<string, unknown> = {}) {
+  const claims = { iss: 'https://oidc.vercel.com/avinashabbigeris-projects', aud: 'https://vercel.com/avinashabbigeris-projects', sub: `owner:avinashabbigeris-projects:project:${project}:environment:${environment}`, owner: 'avinashabbigeris-projects', owner_id: 'team_JWeTI30xjnERJbMpLUkgTpzV', project, project_id: projectId, environment, ...overrides }
   return `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`
 }
 
@@ -31,10 +31,10 @@ describe('Editor Firebase backend WIF credential', () => {
 
   it('accepts the exact keyless Production identity and validates its Production Vercel subject', async () => {
     expect(resolveFirebaseBackendWifConfig(production)).toMatchObject({ projectId: 'mi-tutora-pro', storageBucket: 'mi-tutora-pro-admin-content', providerAudience: production.EDITOR_FIREBASE_WIF_AUDIENCE, serviceAccountEmail: production.EDITOR_FIREBASE_SERVICE_ACCOUNT_EMAIL })
-    await expect(verifiedEditorOidcToken(async () => oidcToken('ycoders-admin', 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', 'production'), production)).resolves.toContain('.')
+    await expect(verifiedEditorOidcToken(async () => oidcToken('ycoders-editor', 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', 'production'), production)).resolves.toContain('.')
     const source = vi.fn(); class Source { constructor(value: unknown) { source(value) } }
     const impersonated = vi.fn(); class Target { constructor(value: unknown) { impersonated(value) } async getAccessToken() { return { token: 'ephemeral-production' } } }
-    const credential = createFirebaseBackendWifCredential(production, async () => oidcToken('ycoders-admin', 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', 'production'), Source as never, Target as never)
+    const credential = createFirebaseBackendWifCredential(production, async () => oidcToken('ycoders-editor', 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', 'production'), Source as never, Target as never)
     await expect(credential.getAccessToken()).resolves.toEqual({ access_token: 'ephemeral-production', expires_in: 540 })
     expect(source).toHaveBeenCalledWith(expect.objectContaining({ audience: production.EDITOR_FIREBASE_WIF_AUDIENCE }))
     expect(impersonated).toHaveBeenCalledWith(expect.objectContaining({ targetPrincipal: production.EDITOR_FIREBASE_SERVICE_ACCOUNT_EMAIL, lifetime: 600 }))
@@ -42,7 +42,7 @@ describe('Editor Firebase backend WIF credential', () => {
 
   it('preserves Preview staging configuration and rejects Production claims on that profile', async () => {
     expect(resolveFirebaseBackendWifConfig(base)).toMatchObject({ projectId: 'ycoders-v2-staging', storageBucket: 'ycoders-v2-staging.firebasestorage.app' })
-    await expect(verifiedEditorOidcToken(async () => oidcToken('ycoders-admin', 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', 'production'), base)).rejects.toThrow(/not approved/)
+    await expect(verifiedEditorOidcToken(async () => oidcToken('ycoders-editor', 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', 'production'), base)).rejects.toThrow(/not approved/)
   })
 
   it.each([
@@ -64,10 +64,12 @@ describe('Editor Firebase backend WIF credential', () => {
     ['credential file', { GOOGLE_APPLICATION_CREDENTIALS: 'key.json' }],
   ])('fails closed for Production %s', (_label, override) => expect(() => resolveFirebaseBackendWifConfig({ ...production, ...override })).toThrow())
 
-  it('rejects a wrong Production project, deployment, or subject claim', async () => {
+  it('rejects legacy, wrong project ID, wrong environment, and wrong team Production claims', async () => {
     for (const token of [
-      oidcToken('ycoders-compiler', 'prj_AEw1e2AzOwENQVgeAkG0GrUtSntN', 'production'),
-      oidcToken('ycoders-admin', 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', 'preview'),
+      oidcToken('ycoders-admin', 'prj_VdnJ6Q6FzEL5u5nSvUL88uoMB4xq', 'production'),
+      oidcToken('ycoders-editor', 'prj_wrong', 'production'),
+      oidcToken('ycoders-editor', 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', 'preview'),
+      oidcToken('ycoders-editor', 'prj_YgiW6kAS3VfnN9oHq6t5ayeiYvXm', 'production', { owner_id: 'team_wrong' }),
     ]) await expect(verifiedEditorOidcToken(async () => token, production)).rejects.toThrow(/not approved/)
   })
 })
