@@ -1,14 +1,16 @@
 import { z } from 'zod'
 import { uuidSchema } from '../content/core/identifiers.js'
-import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders } from './courseDelivery.js'
+import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders, normalizeCourseCatalogLimit } from './courseDelivery.js'
 import { GatewayServiceAuthError, type GatewayServiceVerifier } from './gatewayServiceAuth.js'
 
-export type GatewayDeliveryRequest = { authorization?: string; correlationId?: string; method: string; path: string; contentId?: string; version?: string; assetId?: string; kind: 'active'|'version'|'asset' }
+export type GatewayDeliveryRequest = { authorization?: string; correlationId?: string; method: string; path: string; contentId?: string; version?: string; assetId?: string; limit?: string; kind: 'catalog'|'active'|'version'|'asset' }
 export type GatewayDeliveryResult = { status: number; headers: Record<string,string>; body?: unknown; bytes?: Uint8Array }
 
 export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryRequest, dependencies: { verifier: GatewayServiceVerifier; service: CourseDeliveryService }): Promise<GatewayDeliveryResult> {
   try {
     const principal = await dependencies.verifier.verify({ authorization: request.authorization, method: request.method, path: request.path, correlationId: request.correlationId })
+    if (request.kind === 'catalog' && request.method !== 'GET') return failure(405, 'V2_METHOD_NOT_ALLOWED', 'Use GET for the V2 Course catalog', principal.correlationId)
+    if (request.kind === 'catalog') return success(await dependencies.service.catalog(normalizeCourseCatalogLimit(request.limit)), 'catalog', principal.correlationId)
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return failure(422, 'V2_CONTENT_NOT_FOUND', 'A valid explicit V2 Course ID is required', principal.correlationId)
     if (process.env.VERCEL_ENV === 'preview' && request.kind === 'active' && request.contentId === '00000000-0000-4000-8000-000000000000') {
       await dependencies.service.backendReadinessProbe()
@@ -30,5 +32,5 @@ export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryReq
     return failure(500, 'V2_DELIVERY_FAILURE', 'V2 Course gateway delivery could not be completed', request.correlationId)
   }
 }
-const success = (data: unknown, kind: 'active'|'version', correlationId: string): GatewayDeliveryResult => ({ status: 200, headers: { ...deliveryCacheHeaders(kind), 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'X-Correlation-Id': correlationId }, body: { ok: true, data } })
+const success = (data: unknown, kind: 'catalog'|'active'|'version', correlationId: string): GatewayDeliveryResult => ({ status: 200, headers: { ...deliveryCacheHeaders(kind), 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'X-Correlation-Id': correlationId }, body: { ok: true, data } })
 const failure = (status: number, code: string, message: string, correlationId?: string, details?: unknown): GatewayDeliveryResult => ({ status, headers: { 'Cache-Control': 'private, no-store', 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', ...(correlationId ? { 'X-Correlation-Id': correlationId } : {}) }, body: { ok: false, error: { code, message, ...(correlationId ? { correlationId } : {}), ...(details === undefined ? {} : { details }) } } })

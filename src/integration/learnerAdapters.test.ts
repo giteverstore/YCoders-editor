@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adaptChallenge, adaptCourse, adaptPractice, adaptProject, assetDeliveryDescriptor } from './learnerAdapters'
+import { adaptChallenge, adaptCourse, adaptPractice, adaptProject, assetDeliveryDescriptor, SUPPORTED_COURSE_BLOCKS } from './learnerAdapters'
 import * as fixtures from './learnerAdapter.fixtures'
 
 describe('pure learner adapters', () => {
@@ -47,6 +47,20 @@ describe('pure learner adapters', () => {
     expect(adaptCourse(fixtures.courseDirectFixture)).toMatchObject({ ok: true, value: { courseIcon: null } })
     fixture.assetManifest = []
     expect(adaptCourse(fixture)).toMatchObject({ ok: false, errors: [expect.objectContaining({ code: 'course.icon-manifest-missing' })] })
+  })
+  it('preserves expectedOutput and Course solution blocks and inventories the complete learner block matrix', () => {
+    const fixture = structuredClone(fixtures.courseDirectFixture), module = fixture.document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    const expectedOutput = { id: '12000000-0000-4000-8000-000000000041', schemaVersion: 1 as const, type: 'expectedOutput' as const, data: { value: '{"ok":true}', format: 'json' as const } }
+    const solution = { id: '12000000-0000-4000-8000-000000000042', schemaVersion: 1 as const, type: 'solution' as const, data: { content: { type: 'doc' as const, content: [{ type: 'paragraph' as const, content: [{ type: 'text' as const, text: 'Explain the answer.' }] }] }, code: { language: 'javascript', value: 'console.log(true)' } } }
+    module.lessons[0].blocks.push(expectedOutput, solution)
+    const result = adaptCourse(fixture)
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) return
+    const delivered = result.value.modules[0].lessons?.[0].blocks ?? []
+    expect(delivered.find(({ id }) => id === expectedOutput.id)).toEqual(expectedOutput)
+    expect(delivered.find(({ id }) => id === solution.id)).toEqual(solution)
+    expect(SUPPORTED_COURSE_BLOCKS).toEqual(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'])
   })
   it('rejects removed lesson IDs, unsupported blocks, and implicit namespaces', () => { expect(adaptCourse(fixtures.courseRemovedLessonFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.lesson-id-removed' }] }); expect(adaptCourse(fixtures.courseUnsupportedBlockFixture)).toMatchObject({ ok: false, errors: [{ code: 'block.unsupported' }] }); expect(adaptCourse(fixtures.wrongNamespaceFixture as never)).toMatchObject({ ok: false, classification: 'invalid-publication' }) })
   it('rejects duplicate structural IDs and invalid navigation targets', () => { expect(adaptCourse(fixtures.courseDuplicateIdFixture)).toMatchObject({ ok: false, classification: 'invalid-publication' }); expect(adaptCourse(fixtures.courseInvalidNavigationFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.navigation-target-invalid' }] }) })

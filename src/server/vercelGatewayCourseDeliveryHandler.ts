@@ -13,7 +13,7 @@ export async function runGatewayCourseDeliveryHandler(request: VercelRequest, re
     const baseVerifier = createGatewayServiceVerifier(); let serviceId = 'unverified'
     const verifier = { verify: async (context: Parameters<typeof baseVerifier.verify>[0]) => { const principal = await baseVerifier.verify(context); serviceId = principal.serviceId; return principal } }
     const contentId = value('contentId'), version = value('version')
-    const result = await handleGatewayCourseDeliveryApi({ authorization, correlationId, method: request.method ?? 'GET', path: request.url?.split('?')[0] ?? '/', contentId, version, assetId: value('assetId'), kind }, { service: createLazyCourseDeliveryService(), verifier })
+    const result = await handleGatewayCourseDeliveryApi({ authorization, correlationId, method: request.method ?? 'GET', path: request.url?.split('?')[0] ?? '/', contentId, version, assetId: value('assetId'), limit: value('limit'), kind }, { service: createLazyCourseDeliveryService(), verifier })
     console.info('v2_gateway.delivery', { serviceId, namespace:'v2', contentType:'course', contentId, requestedPublicationVersion:version ?? null, mode:kind === 'active' ? 'active' : 'exact', resultCode:result.status, correlationId:correlationId ?? null, latencyMs:Date.now()-startedAt })
     Object.entries(result.headers).forEach(([name, header]) => response.setHeader(name, header))
     if (result.bytes) response.status(result.status).send(Buffer.from(result.bytes)); else response.status(result.status).json(result.body)
@@ -28,6 +28,7 @@ export function createLazyCourseDeliveryService(factory = () => getCourseDeliver
   let service: CourseDeliveryService | undefined
   const current = () => service ??= factory()
   return {
+    catalog: (limit) => current().catalog(limit),
     active: (contentId) => current().active(contentId),
     exact: (contentId, version) => current().exact(contentId, version),
     asset: (contentId, version, assetId) => current().asset(contentId, version, assetId),

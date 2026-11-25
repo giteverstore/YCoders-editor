@@ -118,6 +118,7 @@ describe('consolidated V2 Admin router', () => {
 
 describe('consolidated V2 gateway router', () => {
   it.each([
+    ['/api/v2/gateway/courses', 'catalog', {}],
     ['/api/v2/gateway/courses/course-1', 'active', { contentId: 'course-1' }],
     ['/api/v2/gateway/courses/course-1/versions/7', 'version', { contentId: 'course-1', version: '7' }],
     ['/api/v2/gateway/courses/course-1/versions/7/assets/a-1', 'asset', { contentId: 'course-1', version: '7', assetId: 'a-1' }],

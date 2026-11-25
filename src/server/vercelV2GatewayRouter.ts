@@ -17,17 +17,19 @@ export async function runV2GatewayRouter(request: VercelRequest, response: Verce
     request.url = `/api/v2/gateway/${gatewayPath}`
   }
   const offset = publicRoute ? 3 : internalRoute ? 2 : -1
-  if (!path || offset < 0 || !['courses', 'practice'].includes(path[offset] ?? '') || !path[offset + 1]) return notFound(response)
+  if (!path || offset < 0 || !['courses', 'practice'].includes(path[offset] ?? '')) return notFound(response)
   const handler = typeof handlers === 'function' ? handlers : handlers[path[offset] as keyof GatewayHandlers]
   if (internalRoute && !gatewayPath) request.url = request.url?.replace(/^\/api\/internal-v2-gateway/, '/api/v2/gateway')
+  if (path[offset] === 'courses' && path.length === offset + 1) return runDelivery(request, response, handler, 'catalog')
+  if (!path[offset + 1]) return notFound(response)
   if (path.length === offset + 2) return runDelivery(request, response, handler, 'active', path[offset + 1])
   if (path.length === offset + 4 && path[offset + 2] === 'versions') return runDelivery(request, response, handler, 'version', path[offset + 1], path[offset + 3])
   if (path.length === offset + 6 && path[offset + 2] === 'versions' && path[offset + 4] === 'assets') return runDelivery(request, response, handler, 'asset', path[offset + 1], path[offset + 3], path[offset + 5])
   return notFound(response)
 }
 
-function runDelivery(request: VercelRequest, response: VercelResponse, handler: GatewayHandler, kind: 'active' | 'version' | 'asset', contentId: string, version?: string, assetId?: string) {
-  request.query = { ...request.query, contentId, ...(version ? { version } : {}), ...(assetId ? { assetId } : {}) }
+function runDelivery(request: VercelRequest, response: VercelResponse, handler: GatewayHandler, kind: 'catalog' | 'active' | 'version' | 'asset', contentId?: string, version?: string, assetId?: string) {
+  request.query = { ...request.query, ...(contentId ? { contentId } : {}), ...(version ? { version } : {}), ...(assetId ? { assetId } : {}) }
   return handler(request, response, kind)
 }
 

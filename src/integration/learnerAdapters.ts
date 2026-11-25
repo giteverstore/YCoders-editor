@@ -3,7 +3,8 @@ import type { ContentBlock } from '../content/blocks/block.schemas.js'
 import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
 import { practiceArgumentTypeSchema, practiceExecutionModeSchema, practiceLanguageIdSchema, practiceResultTypeSchema, practiceSemanticValidatorIdSchema } from '../content/domains/practice/practice.execution.js'
 
-const supportedBlocks = new Set(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise'])
+export const SUPPORTED_COURSE_BLOCKS = Object.freeze(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'] as const)
+const supportedBlocks = new Set<string>(SUPPORTED_COURSE_BLOCKS)
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })
 const fail = <T>(errors: AdapterFinding[], classification: 'requires-learner-upgrade' | 'requires-v2-schema-change' | 'invalid-publication', warnings: AdapterFinding[] = []): AdapterResult<T> => ({ ok: false, errors, warnings, classification })
 const success = <T>(value: T, warnings: AdapterFinding[] = []): AdapterResult<T> => ({ ok: true, value, warnings, classification: warnings.length ? 'compatible-with-warnings' : 'compatible' })

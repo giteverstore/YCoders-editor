@@ -1,15 +1,20 @@
 import { createHash } from 'node:crypto'
-import type { Firestore } from 'firebase-admin/firestore'
+import { FieldPath, type Firestore } from 'firebase-admin/firestore'
 import type { getStorage } from 'firebase-admin/storage'
 import { z } from 'zod'
 import { contentEnvelopeSchema, type CourseDocument } from '../content/core/envelope.js'
+import { uuidSchema } from '../content/core/identifiers.js'
 import { assetManifestEntrySchema, canonicalJson, contentHashSchema, publicationIdentitySchema, V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts.js'
 import { adaptCourse } from '../integration/learnerAdapters.js'
-import type { AdapterFinding, AssetDeliveryDescriptor, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types.js'
+import type { AdapterFinding, AssetDeliveryDescriptor, LearnerCourse, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 type VersionRecord = { identity: z.infer<typeof publicationIdentitySchema>; schemaVersion: string; artifactPath: string; artifactHash: string; documentHash: string; assetManifest: z.infer<typeof assetManifestEntrySchema>[]; assetManifestHash: string; status: string }
 export type DeliveryCourseEnvelope = { namespace: 'v2'; contentType: 'course'; contentId: string; publicationVersion: number; course: unknown; integrity: { artifactHash: string; documentHash: string; assetManifestHash: string; verified: true }; warnings: AdapterFinding[] }
+export const DEFAULT_COURSE_CATALOG_LIMIT = 24
+export const MAX_COURSE_CATALOG_LIMIT = 50
+export type CourseCatalogEntry = { contentId: string; publicationVersion: number; title: string; description: string; language: string; difficulty: string; estimatedMinutes: number; courseIcon: AssetDeliveryDescriptor | null; releasedAt: string }
+export type CourseCatalogEnvelope = { namespace: 'v2'; contentType: 'course'; items: CourseCatalogEntry[]; page: { limit: number; count: number } }
 export type DeliveredAsset = { bytes: Uint8Array; contentType: 'image/png' | 'image/jpeg' | 'image/webp'; contentHash: string }
 export class DeliveryError extends Error { constructor(readonly code: string, message: string, readonly status: number, readonly details?: unknown) { super(message); this.name = 'DeliveryError' } }
 
@@ -22,6 +27,20 @@ export class CourseDeliveryService {
     if (value.namespace !== 'v2' || value.contentType !== 'course') throw new DeliveryError('V2_CONTENT_NOT_FOUND', 'V2 Course not found', 404)
     if (!isActivelyDiscoverable(value.state, value.visibility) || !value.activeVersionNumber) throw new DeliveryError('V2_NOT_DISCOVERABLE', 'V2 Course is not available through active discovery', 404)
     return this.exact(contentId, value.activeVersionNumber)
+  }
+  async catalog(requestedLimit = DEFAULT_COURSE_CATALOG_LIMIT): Promise<CourseCatalogEnvelope> {
+    const limit = normalizeCourseCatalogLimit(requestedLimit)
+    const snapshot = await this.firestore.collection(V2_PUBLICATION_COLLECTION)
+      .where('contentType', '==', 'course').where('state', '==', 'published').where('visibility', '==', 'public')
+      .orderBy('updatedAt', 'desc').orderBy(FieldPath.documentId(), 'asc').limit(limit).get()
+    const items = await Promise.all(snapshot.docs.map(async (pointer) => {
+      const value = pointer.data() as { contentId?: unknown; activeVersionNumber?: unknown; updatedAt?: unknown }
+      const contentId = typeof value.contentId === 'string' ? value.contentId : pointer.id
+      if (!uuidSchema.safeParse(contentId).success || !Number.isSafeInteger(value.activeVersionNumber) || Number(value.activeVersionNumber) < 1 || typeof value.updatedAt !== 'string') throw new DeliveryError('V2_INTEGRITY_FAILURE', 'Public Course pointer is invalid', 503)
+      const delivered = await this.exact(contentId, Number(value.activeVersionNumber)), course = delivered.course as LearnerCourse
+      return { contentId, publicationVersion: delivered.publicationVersion, title: course.title, description: course.description, language: course.language, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, courseIcon: course.courseIcon, releasedAt: value.updatedAt }
+    }))
+    return { namespace: 'v2', contentType: 'course', items, page: { limit, count: items.length } }
   }
   async backendReadinessProbe(): Promise<void> {
     await this.firestore.collection(V2_PUBLICATION_COLLECTION).doc('00000000-0000-4000-8000-000000000000').get()
@@ -65,6 +84,7 @@ export class CourseDeliveryService {
 }
 
 export function isActivelyDiscoverable(state: unknown, visibility: unknown) { return state === 'published' && visibility === 'public' }
+export function normalizeCourseCatalogLimit(value: unknown) { const parsed = typeof value === 'string' ? Number(value) : value; return Number.isSafeInteger(parsed) && Number(parsed) > 0 ? Math.min(Number(parsed), MAX_COURSE_CATALOG_LIMIT) : DEFAULT_COURSE_CATALOG_LIMIT }
 export function resolveAssetDeliveryEndpoint(descriptor: AssetDeliveryDescriptor) { if (descriptor.namespace !== 'v2' || descriptor.kind !== 'versioned-v2-asset') throw new DeliveryError('V2_INTEGRITY_FAILURE', 'Invalid V2 asset descriptor', 422); return `/api/v2/delivery/courses/${encodeURIComponent(descriptor.contentId)}/versions/${descriptor.publicationVersion}/assets/${encodeURIComponent(descriptor.assetId)}` }
-export const deliveryCacheHeaders = (kind: 'active' | 'version' | 'asset'): Record<string, string> => kind === 'active' ? { 'Cache-Control': 'private, no-store' } : { 'Cache-Control': 'private, no-cache', Vary: 'Authorization' }
+export const deliveryCacheHeaders = (kind: 'catalog' | 'active' | 'version' | 'asset'): Record<string, string> => kind === 'catalog' ? { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' } : kind === 'active' ? { 'Cache-Control': 'private, no-store' } : { 'Cache-Control': 'private, no-cache', Vary: 'Authorization' }
 const hash = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`
