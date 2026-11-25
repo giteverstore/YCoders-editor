@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { replaceImageAsset, ImageBlockEditor } from '../../assets/ImageBlockEditor'
 import { ModalDialog } from '../../components/ui/ModalDialog'
+import { MODAL_PORTAL_TARGET, lockModalScroll, modalPortalTarget } from '../../components/ui/ModalPortal'
 import { blockSchema, type ContentBlock } from '../../content/blocks/block.schemas'
 import { DEFAULT_IMAGE_PRESENTATION, imageDisplayWidth, imagePresentation, validCustomImageWidth } from '../../content/blocks/imagePresentation'
 import { BLOCK_SCHEMA_VERSION } from '../../content/core/versions'
@@ -20,6 +21,18 @@ describe('viewport-safe media and table authoring', () => {
     expect(html).toContain('modal-dialog__header')
     expect(html).toContain('modal-dialog__body')
     expect(html).toContain('aria-modal="true"')
+  })
+
+  it('mounts shared modals at the document root and restores page scroll state', () => {
+    const body = { style: { overflow: 'auto' } }, root = { style: { overflow: 'scroll' } }, documentLike = { body, documentElement: root }
+    expect(MODAL_PORTAL_TARGET).toBe('document.body')
+    expect(modalPortalTarget(documentLike as unknown as Document)).toBe(body)
+    const restore = lockModalScroll(documentLike as unknown as Document)
+    expect(body.style.overflow).toBe('hidden')
+    expect(root.style.overflow).toBe('hidden')
+    restore()
+    expect(body.style.overflow).toBe('auto')
+    expect(root.style.overflow).toBe('scroll')
   })
 
   it('loads legacy images with defaults and validates custom widths', () => {

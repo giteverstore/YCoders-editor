@@ -5,6 +5,7 @@ import type { ContentType } from '../content/core/envelope'
 import { PublicationApiClient, PublicationApiError, type PublicationPointer, type PublicationPreparation, type PublicationResult, type PublicationVersionSummary } from './publicationClient'
 import { publicationEntryState } from './publicationWorkflowPolicy'
 import { PublicationHistory } from './PublicationHistory'
+import { ModalPortal } from '../components/ui/ModalPortal'
 
 type Props = { contentId: string; contentType: ContentType; title: string; source: 'local' | 'cloud'; revision: number | null; isDirty: boolean }
 const prefix = (value: string) => `${value.slice(0, 18)}…`
@@ -31,7 +32,7 @@ export function PublicationWorkflow(props: Props) {
       {props.source === 'local' && <small> Upload or transfer this draft to cloud first.</small>}</div>
     <div>{props.source === 'cloud' && pointer && <button type="button" onClick={() => setHistoryOpen(true)}>History &amp; lifecycle</button>} {canPublish && entry.visible && <button ref={opener} type="button" disabled={!entry.enabled || pointer?.state === 'archived'} title={pointer?.state === 'archived' ? 'Archived identities cannot publish' : entry.reason ?? undefined} onClick={() => void prepare()}>Publish</button>}</div>
     {historyOpen && <PublicationHistory contentId={props.contentId} onClose={() => setHistoryOpen(false)} onChanged={refresh}/>}
-    {open && <div className="publication-backdrop"><div ref={dialog} className="publication-dialog" role="dialog" aria-modal="true" aria-labelledby="publication-title" aria-describedby="publication-description" onKeyDown={trap}>
+    {open && <ModalPortal><div className="publication-backdrop"><div ref={dialog} className="publication-dialog" role="dialog" aria-modal="true" aria-labelledby="publication-title" aria-describedby="publication-description" onKeyDown={trap}>
       <button className="publication-close" aria-label="Cancel publishing" disabled={loading} onClick={close}>×</button><p className="eyebrow">Step {step} of 3</p><h2 id="publication-title">{result ? 'Publication complete' : step === 1 ? 'Validate publication' : step === 2 ? 'Review publication impact' : `Authorize version ${preparation?.proposedVersionNumber ?? ''}`}</h2>
       <p id="publication-description">{loading ? 'Checking authoritative publication state…' : 'This workflow never changes your draft content.'}</p>
       {error && <div role="alert" className="publication-error"><strong>{error.message}</strong>{Array.isArray(error.details) && <FindingList findings={error.details} />}{error.requiresRestart && <button onClick={restart}>Acknowledge and restart validation</button>}{error.code === 'NETWORK_UNCERTAIN' && preparation && <button disabled={loading} onClick={() => void publish()}>Retry same publication request</button>}</div>}
@@ -40,7 +41,7 @@ export function PublicationWorkflow(props: Props) {
         {step === 1 && <StepOne value={preparation} />}{step === 2 && <StepTwo value={preparation} />}{step === 3 && <StepThree value={preparation} account={auth.user?.email ?? preparation.actorUid} />}
         <label className="publication-confirm"><input type="checkbox" checked={confirmed[step - 1]} onChange={e => setConfirmed(x => x.map((v, i) => i === step - 1 ? e.target.checked : v))}/> {step === 1 ? 'I confirm validation passed for publication.' : step === 2 ? 'I confirm this immutable publication impact.' : 'I authorize this exact publication version.'}</label>
         <div className="publication-actions"><button onClick={close} disabled={loading}>Cancel</button>{step > 1 && <button disabled={loading} onClick={() => setStep((step - 1) as 1 | 2)}>Back</button>}{step < 3 ? <button disabled={!confirmed[step - 1] || (step === 1 && !preparation.canPublish)} onClick={() => setStep((step + 1) as 2 | 3)}>Continue to step {step + 1}</button> : <button disabled={!confirmed[2] || loading || new Date(preparation.expiresAt) <= new Date()} onClick={() => void publish()}>{loading ? 'Publishing…' : `Publish Version ${preparation.proposedVersionNumber}`}</button>}</div>
-      </>}</div></div>}
+      </>}</div></div></ModalPortal>}
   </section>
 }
 function StepOne({ value }: { value: PublicationPreparation }) { return <div><ul className="readiness-list"><li>Schema: {value.schemaValid ? 'valid' : 'blocked'}</li><li>Storage: {value.storageReady ? 'ready' : 'blocked'}</li><li>Learner runtime: {value.learnerRuntimeCompatible ? 'compatible' : 'compatibility notes'}</li><li>Learner integration: {value.learnerIntegrationReady ? 'ready' : 'not ready'}</li></ul><FindingList findings={value.findings}/>{value.canPublish && <p role="status">Validation passed for publication. Warnings remain visible.</p>}</div> }
