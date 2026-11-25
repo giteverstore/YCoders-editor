@@ -3,6 +3,8 @@ import { OAuth2Client } from 'google-auth-library'
 
 export const V2_GATEWAY_AUDIENCE = 'ycoders-editor-v2-gateway'
 export const V2_GATEWAY_CALLER = 'ycoders-learner-gateway'
+export const V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT = 'ycoders-learner-gw-runtime@mi-tutora-pro.iam.gserviceaccount.com'
+export const V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE = 'https://ycoders-editor.vercel.app'
 const MAX_ASSERTION_LIFETIME_SECONDS = 60
 const MAX_CLOCK_SKEW_SECONDS = 5
 
@@ -70,8 +72,34 @@ export class StagingGoogleGatewayVerifier implements GatewayServiceVerifier {
   }
 }
 
+export class ProductionGoogleGatewayVerifier implements GatewayServiceVerifier {
+  private readonly audience: string
+  private readonly serviceAccount: string
+  constructor(environment: NodeJS.ProcessEnv=process.env, private readonly client: Pick<OAuth2Client,'verifyIdToken'>=new OAuth2Client(), private readonly now=()=>Date.now()) {
+    const deployment=String(environment.VERCEL_ENV??'').toLowerCase()
+    this.audience=String(environment.V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE??'')
+    this.serviceAccount=String(environment.V2_GATEWAY_SERVICE_ACCOUNT_EMAIL??'')
+    if (deployment!=='production' || this.audience!==V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE || this.serviceAccount!==V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT || !isExactHttpsOrigin(this.audience)) throw new GatewayServiceAuthError('GATEWAY_SERVICE_AUTH_UNCONFIGURED','Production Google identity verification is not configured',403)
+  }
+  async verify(context: GatewayServiceAuthContext): Promise<GatewayServicePrincipal> {
+    const match=context.authorization?.match(/^Bearer\s+([^\s]+)$/i)
+    if(!match) throw new GatewayServiceAuthError('GATEWAY_SERVICE_UNAUTHENTICATED','Google service identity is required')
+    let payload: { iss?:string; email?:string; email_verified?:boolean; sub?:string; iat?:number; exp?:number }|undefined
+    try { payload=(await this.client.verifyIdToken({ idToken:match[1], audience:this.audience })).getPayload() } catch { throw new GatewayServiceAuthError('GATEWAY_SERVICE_UNAUTHENTICATED','Google service identity is invalid') }
+    const now=Math.floor(this.now()/1000), issuer=String(payload?.iss??''), email=String(payload?.email??''), sub=String(payload?.sub??'')
+    if(!['https://accounts.google.com','accounts.google.com'].includes(issuer)) throw new GatewayServiceAuthError('GATEWAY_SERVICE_UNAUTHORIZED','Google issuer is not trusted',403)
+    if(email!==V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT || email!==this.serviceAccount || payload?.email_verified!==true || !sub) throw new GatewayServiceAuthError('GATEWAY_SERVICE_UNAUTHORIZED','Google service account is not approved',403)
+    if(!Number.isFinite(payload?.iat)||!Number.isFinite(payload?.exp)||(payload!.iat as number)>now+30||(payload!.exp as number)<=now) throw new GatewayServiceAuthError('GATEWAY_SERVICE_ASSERTION_EXPIRED','Google service identity timing is invalid')
+    if(!context.correlationId) throw new GatewayServiceAuthError('GATEWAY_SERVICE_REQUEST_MISMATCH','Correlation ID is required',403)
+    return { serviceId:email, environment:'production', correlationId:context.correlationId }
+  }
+}
+
+function isExactHttpsOrigin(value: string) { try { const url=new URL(value); return url.protocol==='https:' && url.origin===value && url.pathname==='/' && !url.search && !url.hash } catch { return false } }
+
 export function createGatewayServiceVerifier(environment: NodeJS.ProcessEnv = process.env): GatewayServiceVerifier {
   const mode=String(environment.V2_GATEWAY_SERVICE_AUTH_MODE??'')
+  if(mode==='production-wif') return new ProductionGoogleGatewayVerifier(environment)
   if(mode==='staging-google') return new StagingGoogleGatewayVerifier(environment)
   if (mode !== 'test-ed25519') return new UnconfiguredProductionGatewayVerifier()
   assertLocalOnly(environment)

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { handleGatewayCourseDeliveryApi } from './gatewayCourseDeliveryApi'
-import { LocalTestGatewayServiceVerifier, StagingGoogleGatewayVerifier, V2_GATEWAY_AUDIENCE, V2_GATEWAY_CALLER } from './gatewayServiceAuth'
+import { createGatewayServiceVerifier, LocalTestGatewayServiceVerifier, ProductionGoogleGatewayVerifier, StagingGoogleGatewayVerifier, UnconfiguredProductionGatewayVerifier, V2_GATEWAY_AUDIENCE, V2_GATEWAY_CALLER, V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT, V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE } from './gatewayServiceAuth'
 
 const environment = { VERCEL_ENV: 'development', FIREBASE_ADMIN_PROJECT_ID: 'demo-ycoders-editor-v2', V2_GATEWAY_TRUST_ENVIRONMENT: 'emulator' } as NodeJS.ProcessEnv
 const keys = generateKeyPairSync('ed25519')
@@ -48,4 +48,40 @@ describe('staging Google gateway identity',()=>{
   it.each([[{...payload,email:'other@ycoders-staging.iam.gserviceaccount.com'},'GATEWAY_SERVICE_UNAUTHORIZED'],[{...payload,exp:1100},'GATEWAY_SERVICE_ASSERTION_EXPIRED'],[{...payload,iss:'issuer.example'},'GATEWAY_SERVICE_UNAUTHORIZED']])('rejects untrusted or expired claims',async(value,code)=>{await expect(new StagingGoogleGatewayVerifier(env,client(value as Record<string,unknown>) as never,()=>1_200_000).verify({authorization:'Bearer token',method:'GET',path:'/x',correlationId:'c'})).rejects.toMatchObject({code})})
   it('rejects Firebase-style missing email service identity and local assertions',async()=>{const verifier=new StagingGoogleGatewayVerifier(env,client() as never,()=>1_200_000);await expect(verifier.verify({authorization:'ServiceAssertion local',method:'GET',path:'/x',correlationId:'c'})).rejects.toMatchObject({code:'GATEWAY_SERVICE_UNAUTHENTICATED'})})
   it('cannot activate in production',()=>expect(()=>new StagingGoogleGatewayVerifier({...env,VERCEL_ENV:'production'},client() as never)).toThrow(/not configured/i))
+})
+
+describe('production Google gateway identity',()=>{
+  const env={VERCEL_ENV:'production',V2_GATEWAY_SERVICE_AUTH_MODE:'production-wif',V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE:V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE,V2_GATEWAY_SERVICE_ACCOUNT_EMAIL:V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT} as NodeJS.ProcessEnv
+  const payload={iss:'https://accounts.google.com',sub:'production-subject',email:V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT,email_verified:true,iat:1000,exp:1600}
+  const client=(value:Record<string,unknown>=payload, failure=false)=>({verifyIdToken:async(options:{idToken:string;audience:string})=>{if(failure)throw new Error('invalid signature');expect(options).toEqual({idToken:'google-token',audience:V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE});return{getPayload:()=>value}}})
+  const context={authorization:'Bearer google-token',method:'GET',path:'/api/v2/gateway/courses',correlationId:'production-correlation'}
+
+  it('accepts the approved Production service account and returns a Production-bound principal',async()=>{
+    const verifier=new ProductionGoogleGatewayVerifier(env,client() as never,()=>1_200_000)
+    await expect(verifier.verify(context)).resolves.toEqual({serviceId:V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT,environment:'production',correlationId:'production-correlation'})
+  })
+  it.each(['preview','development'])('rejects production-wif configuration in %s',deployment=>expect(()=>new ProductionGoogleGatewayVerifier({...env,VERCEL_ENV:deployment},client() as never)).toThrow(/not configured/i))
+  it.each([
+    ['wrong email',{...payload,email:'other@mi-tutora-pro.iam.gserviceaccount.com'}],
+    ['missing email',(({email:_email,...value})=>value)(payload)],
+    ['unverified email',{...payload,email_verified:false}],
+  ])('rejects %s',async(_label,value)=>await expect(new ProductionGoogleGatewayVerifier(env,client(value) as never,()=>1_200_000).verify(context)).rejects.toMatchObject({code:'GATEWAY_SERVICE_UNAUTHORIZED',status:403}))
+  it.each(['https://admin.ycoders.com','https://ycoders.com','https://arbitrary.example','https://ycoders-editor.vercel.app/path'])('rejects invalid configured audience %s',audience=>expect(()=>new ProductionGoogleGatewayVerifier({...env,V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE:audience},client() as never)).toThrow(/not configured/i))
+  it('rejects expired tokens, invalid issuers, invalid signatures, and missing Bearer tokens',async()=>{
+    await expect(new ProductionGoogleGatewayVerifier(env,client({...payload,exp:1100}) as never,()=>1_200_000).verify(context)).rejects.toMatchObject({code:'GATEWAY_SERVICE_ASSERTION_EXPIRED'})
+    await expect(new ProductionGoogleGatewayVerifier(env,client({...payload,iss:'issuer.example'}) as never,()=>1_200_000).verify(context)).rejects.toMatchObject({code:'GATEWAY_SERVICE_UNAUTHORIZED'})
+    await expect(new ProductionGoogleGatewayVerifier(env,client(payload,true) as never,()=>1_200_000).verify(context)).rejects.toMatchObject({code:'GATEWAY_SERVICE_UNAUTHENTICATED'})
+    await expect(new ProductionGoogleGatewayVerifier(env,client() as never,()=>1_200_000).verify({...context,authorization:undefined})).rejects.toMatchObject({code:'GATEWAY_SERVICE_UNAUTHENTICATED'})
+  })
+  it('requires request correlation binding',async()=>await expect(new ProductionGoogleGatewayVerifier(env,client() as never,()=>1_200_000).verify({...context,correlationId:undefined})).rejects.toMatchObject({code:'GATEWAY_SERVICE_REQUEST_MISMATCH',status:403}))
+})
+
+describe('gateway verifier factory modes',()=>{
+  it('selects explicit production, staging, and local verifiers and leaves unsupported modes fail-closed',()=>{
+    const production={VERCEL_ENV:'production',V2_GATEWAY_SERVICE_AUTH_MODE:'production-wif',V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE:V2_PRODUCTION_GOOGLE_TOKEN_AUDIENCE,V2_GATEWAY_SERVICE_ACCOUNT_EMAIL:V2_PRODUCTION_GATEWAY_SERVICE_ACCOUNT} as NodeJS.ProcessEnv
+    expect(createGatewayServiceVerifier(production)).toBeInstanceOf(ProductionGoogleGatewayVerifier)
+    expect(createGatewayServiceVerifier({VERCEL_ENV:'preview',V2_GATEWAY_SERVICE_AUTH_MODE:'staging-google',V2_GATEWAY_GOOGLE_TOKEN_AUDIENCE:'https://editor-staging.example.com',V2_GATEWAY_SERVICE_ACCOUNT_EMAIL:'learner-gateway@ycoders-staging.iam.gserviceaccount.com'})).toBeInstanceOf(StagingGoogleGatewayVerifier)
+    expect(createGatewayServiceVerifier({...environment,V2_GATEWAY_SERVICE_AUTH_MODE:'test-ed25519',V2_GATEWAY_TEST_PUBLIC_KEY:keys.publicKey.export({type:'spki',format:'pem'}).toString()})).toBeInstanceOf(LocalTestGatewayServiceVerifier)
+    expect(createGatewayServiceVerifier({VERCEL_ENV:'production',V2_GATEWAY_SERVICE_AUTH_MODE:'unsupported'})).toBeInstanceOf(UnconfiguredProductionGatewayVerifier)
+  })
 })
