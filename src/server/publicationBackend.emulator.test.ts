@@ -93,6 +93,7 @@ describe('immutable publication backend', () => {
     const asset = await getAssetServerDependencies().repository.create({ id: assetId, originalFilename: 'publication.png', objectPath: `editor-v2-assets/${assetId}/publication.png`, mimeType: 'image/png', size: bytes.length, width: 2, height: 3, createdBy: tokens.get('CONTENT_ADMIN')!.uid }, bytes)
     const document = structuredClone(validCourseDocument) as ContentDocument; document.id = '91000000-0000-4000-8000-000000000001'; document.slug = 'asset-course'
     if (document.contentType !== 'course' || document.content.modules[0].organization !== 'lessons') throw new Error('Expected Course')
+    document.content.courseIconAssetId = assetId
     document.content.modules[0].lessons[0].blocks.push({ id: '91000000-0000-4000-8000-000000000002', type: 'image', schemaVersion: 1, data: { assetId, alt: 'Published asset' } })
     await getServerDependencies().repository.create(document, tokens.get('CONTENT_EDITOR')!.uid)
     const contentHash = hashBytes(bytes), digest = contentHash.slice(7), manifest = [{ assetId, mimeType: asset.mimeType, byteLength: bytes.length, width: 2, height: 3, contentHash, publishedObjectPath: `editor-v2-published-assets/sha256/${digest}.png` }]
@@ -105,6 +106,16 @@ describe('immutable publication backend', () => {
     const confirmation2 = await confirmationFor(second, 2, 1, 2, 'publish-new-version', actor.uid, document, manifest)
     expect((await callApi(document.id, 'POST', 'publish', { expectedDraftRevision: 2, expectedPointerRevision: 1, requestId: crypto.randomUUID(), confirmation: confirmation2 }, 'CONTENT_ADMIN')).status).toBe(201)
     expect(((await getPublicationServerDependencies().backend.version(document.id, 2)) as { assetManifest: typeof manifest }).assetManifest[0].publishedObjectPath).toBe(manifest[0].publishedObjectPath)
+  })
+
+  it('blocks preparation when a selected Course icon is absent from the managed asset registry', async () => {
+    const document = structuredClone(validCourseDocument) as ContentDocument
+    document.id = '91000000-0000-4000-8000-000000000010'; document.slug = 'missing-icon-course'
+    if (document.contentType !== 'course') throw new Error('Expected Course')
+    document.content.courseIconAssetId = '91000000-0000-4000-8000-000000000011'
+    await getServerDependencies().repository.create(document, tokens.get('CONTENT_EDITOR')!.uid)
+    await expect(getPublicationServerDependencies().backend.prepare(document.id, 1, tokens.get('CONTENT_ADMIN')!.uid)).rejects.toMatchObject({ code: 'ASSET_NOT_FOUND', status: 422, details: [expect.objectContaining({ code: 'assets.not-ready' })] })
+    expect(await getPublicationServerDependencies().backend.version(document.id, 1)).toBeNull()
   })
 
   it('keeps publication collections inaccessible through browser rules', async () => {

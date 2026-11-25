@@ -2,13 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { adminRoles } from '../auth/permissions'
 import type { ContentDocument } from '../content/core/envelope'
 import { validChallengeDocument, validCourseDocument, validPracticeDocument, validProjectDocument } from '../content/fixtures/validDocuments'
-import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validatePublicationCompatibility } from './publicationContracts'
+import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, collectAssetIds, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validatePublicationCompatibility } from './publicationContracts'
 import { courseCompatibility } from '../server/publicationBackend'
 
 const hash = (c = 'a') => `sha256:${c.repeat(64)}`
 const uuid = (last: string) => `a0000000-0000-4000-8000-${last.padStart(12, '0')}`
 
 describe('final publication contracts', () => {
+  it('collects the Course icon and existing lesson images as publication assets without duplicates', () => {
+    const document = structuredClone(validCourseDocument), iconId = uuid('7'), imageId = uuid('8')
+    document.content.courseIconAssetId = iconId
+    const module = document.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('Expected lesson module')
+    module.lessons[0].blocks.push({ id: uuid('6'), schemaVersion: 1, type: 'image', data: { assetId: imageId, alt: 'Lesson image' } } as never)
+    module.lessons[0].blocks.push({ id: uuid('5'), schemaVersion: 1, type: 'image', data: { assetId: iconId, alt: 'Repeated icon asset' } } as never)
+    expect([...collectAssetIds(document)].sort()).toEqual([iconId, imageId].sort())
+    const noIcon = structuredClone(validCourseDocument)
+    expect([...collectAssetIds(noIcon)]).toEqual([])
+  })
   it('surfaces adapter findings in Course readiness instead of false with no findings', () => {
     const document = structuredClone(validCourseDocument)
     document.content.courseIconAssetId = uuid('9')
