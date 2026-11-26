@@ -29,6 +29,8 @@ export function courseLanguage(id: string): CourseLanguage | undefined {
   return COURSE_LANGUAGES.find((language) => language.id === id)
 }
 
+export function resolveCourseCompilerLanguage(exerciseLanguage: PracticeLanguageId | undefined, lessonLanguage: PracticeLanguageId | undefined, courseLanguageId: PracticeLanguageId | undefined, safeFallback: PracticeLanguageId = 'python'): PracticeLanguageId { return exerciseLanguage ?? lessonLanguage ?? courseLanguageId ?? safeFallback }
+
 export const CALLOUT_VARIANTS = Object.freeze({
   info: { label: 'Info', icon: 'ⓘ' },
   tip: { label: 'Tip', icon: '✶' },

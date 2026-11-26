@@ -87,7 +87,7 @@ export function addLesson(document: CourseDocument, parentId: string, ids: IdFac
   })
 }
 
-export function updateLesson(document: CourseDocument, lessonId: string, values: Partial<Pick<Lesson, 'title' | 'estimatedMinutes'>>): CourseDocument {
+export function updateLesson(document: CourseDocument, lessonId: string, values: Partial<Pick<Lesson, 'title' | 'estimatedMinutes' | 'compilerLanguage'>>): CourseDocument {
   return updateDocument(document, (draft) => { for (const module of draft.content.modules) { const lesson = lessonsIn(module).find((item) => item.id === lessonId); if (lesson) Object.assign(lesson, values) } })
 }
 

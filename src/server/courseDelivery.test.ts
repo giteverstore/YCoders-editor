@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { assetDeliveryDescriptor } from '../integration/learnerAdapters'
 import { handleCourseDeliveryApi } from './courseDeliveryApi'
-import { DeliveryError, deliveryCacheHeaders, isActivelyDiscoverable, resolveAssetDeliveryEndpoint } from './courseDelivery'
+import { DeliveryError, courseCatalogEntry, deliveryCacheHeaders, isActivelyDiscoverable, resolveAssetDeliveryEndpoint } from './courseDelivery'
+import { adaptCourse } from '../integration/learnerAdapters'
+import * as fixtures from '../integration/learnerAdapter.fixtures'
 import { handleGatewayCourseDeliveryApi } from './gatewayCourseDeliveryApi'
 
 describe('private Course delivery policy', () => {
   it('requires published/public for active discovery only', () => { expect(isActivelyDiscoverable('published', 'public')).toBe(true); for (const [state, visibility] of [['published', 'private'], ['unpublished', 'hidden'], ['disabled', 'hidden'], ['archived', 'hidden']]) expect(isActivelyDiscoverable(state, visibility)).toBe(false) })
   it('maps semantic asset descriptors to explicit exact-version endpoints', () => { const descriptor = assetDeliveryDescriptor('v2', '10000000-0000-4000-8000-000000000001', 7, '20000000-0000-4000-8000-000000000001'); expect(resolveAssetDeliveryEndpoint(descriptor)).toBe('/api/v2/delivery/courses/10000000-0000-4000-8000-000000000001/versions/7/assets/20000000-0000-4000-8000-000000000001') })
+  it('derives catalog category and lessonCount from the adapted immutable Course', () => { const adapted = adaptCourse(fixtures.courseSectionsFixture); expect(adapted.ok).toBe(true); if (!adapted.ok) return; adapted.value.category = 'Developer Tools'; const entry = courseCatalogEntry(adapted.value.courseId, adapted.value.identity.publicationVersion, adapted.value, '2026-11-26T00:00:00.000Z'); expect(entry).toMatchObject({ category: 'Developer Tools', lessonCount: 2 }); expect(entry.category).not.toBe(adapted.value.language) })
   it('uses conservative cache headers by response class', () => { expect(deliveryCacheHeaders('active')).toEqual({ 'Cache-Control': 'private, no-store' }); expect(deliveryCacheHeaders('version')).toMatchObject({ 'Cache-Control': 'private, no-cache', Vary: 'Authorization' }); expect(deliveryCacheHeaders('asset')).toMatchObject({ Vary: 'Authorization' }) })
   it('maps authentication and typed delivery failures without leaking internals', async () => {
     const service = { active: async () => { throw new Error('should not run') } }

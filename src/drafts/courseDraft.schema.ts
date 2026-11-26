@@ -6,9 +6,10 @@ import { lifecycleSchema } from '../content/core/lifecycle.js'
 import { CURRENT_SCHEMA_VERSION } from '../content/core/versions.js'
 import type { CourseDocument } from '../content/core/envelope.js'
 import type { DraftRecord } from './draft.types.js'
+import { practiceLanguageIdSchema } from '../content/domains/practice/practice.execution.js'
 
 const draftText = (max: number) => z.string().max(max)
-const draftLesson = z.object({ id: uuidSchema, title: draftText(200), estimatedMinutes: z.number().int().nonnegative().max(1440), blocks: z.array(blockSchema).max(500) }).strict()
+const draftLesson = z.object({ id: uuidSchema, title: draftText(200), estimatedMinutes: z.number().int().nonnegative().max(1440), compilerLanguage: practiceLanguageIdSchema.optional(), blocks: z.array(blockSchema).max(500) }).strict()
 const directModule = z.object({ id: uuidSchema, title: draftText(200), description: draftText(2000).optional(), organization: z.literal('lessons'), lessons: z.array(draftLesson).max(100) }).strict()
 const sectionedModule = z.object({ id: uuidSchema, title: draftText(200), description: draftText(2000).optional(), organization: z.literal('sections'), sections: z.array(z.object({ id: uuidSchema, title: draftText(200), lessons: z.array(draftLesson).max(100) }).strict()).max(50) }).strict()
 
@@ -27,9 +28,10 @@ export const courseDraftDocumentSchema: z.ZodType<CourseDocument> = z.object({
   metadata: z.object({ summary: draftText(500).optional(), tags: z.array(draftText(80)).max(30), locale: draftText(20) }).strict(),
   content: z.object({
     courseIconAssetId: uuidSchema.optional(),
+    defaultCompilerLanguage: practiceLanguageIdSchema.optional(),
     description: draftText(5000), language: draftText(30), difficulty: z.enum(['beginner', 'intermediate', 'advanced']), estimatedMinutes: z.number().int().nonnegative().max(100_000),
     learningOutcomes: z.array(draftText(500)).max(50), modules: z.array(z.discriminatedUnion('organization', [directModule, sectionedModule])).max(100),
-    courseMetadata: z.object({ prerequisites: z.array(draftText(300)).max(30), topics: z.array(draftText(80)).max(30) }).strict(),
+    courseMetadata: z.object({ category: z.string().trim().min(1).max(80).optional(), prerequisites: z.array(draftText(300)).max(30), topics: z.array(draftText(80)).max(30) }).strict(),
   }).strict(),
 }).strict().superRefine((document, context) => {
   const ids = new Set<string>([document.id])

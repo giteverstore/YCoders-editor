@@ -27,10 +27,10 @@ function firestore() {
 describe('released Course catalog', () => {
   it('returns only released public Courses in deterministic release-time/content-ID order with exact active versions', async () => {
     const service = new CourseDeliveryService(firestore() as never, {} as never)
-    vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => ({ namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: contentId === releasedA ? 'Alpha' : 'Beta', description: `${contentId} summary`, language: 'javascript', difficulty: 'beginner', estimatedMinutes: 30, courseIcon: contentId === releasedA ? { kind: 'versioned-v2-asset', namespace: 'v2', contentId, publicationVersion: version, assetId: '20000000-0000-4000-8000-000000000001', deliveryKey: `v2:${contentId}:v${version}:asset:icon` } : null } }))
+    vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => ({ namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: contentId === releasedA ? 'Alpha' : 'Beta', description: `${contentId} summary`, category: 'Developer Tools', language: 'javascript', difficulty: 'beginner', estimatedMinutes: 30, navigation: [{}, {}], courseIcon: contentId === releasedA ? { kind: 'versioned-v2-asset', namespace: 'v2', contentId, publicationVersion: version, assetId: '20000000-0000-4000-8000-000000000001', deliveryKey: `v2:${contentId}:v${version}:asset:icon` } : null } as never }))
     const result = await service.catalog(10)
     expect(result.items.map(({ contentId, publicationVersion }) => ({ contentId, publicationVersion }))).toEqual([{ contentId: releasedA, publicationVersion: 2 }, { contentId: releasedB, publicationVersion: 4 }])
-    expect(result.items[0]).toMatchObject({ title: 'Alpha', description: `${releasedA} summary`, courseIcon: { kind: 'versioned-v2-asset', publicationVersion: 2 }, releasedAt: '2026-11-25T12:00:00.000Z' })
+    expect(result.items[0]).toMatchObject({ title: 'Alpha', description: `${releasedA} summary`, category: 'Developer Tools', lessonCount: 2, courseIcon: { kind: 'versioned-v2-asset', publicationVersion: 2 }, releasedAt: '2026-11-25T12:00:00.000Z' })
     expect(JSON.stringify(result)).not.toMatch(/draft|revision|publishedObjectPath|updatedBy|artifact/i)
   })
 
@@ -39,7 +39,7 @@ describe('released Course catalog', () => {
     expect(normalizeCourseCatalogLimit('999')).toBe(MAX_COURSE_CATALOG_LIMIT)
     expect(normalizeCourseCatalogLimit('invalid')).toBe(DEFAULT_COURSE_CATALOG_LIMIT)
     const service = new CourseDeliveryService(firestore() as never, {} as never)
-    vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => ({ namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: 'Course', description: '', language: 'javascript', difficulty: 'beginner', estimatedMinutes: 1, courseIcon: null } }))
+    vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => ({ namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: 'Course', description: '', category: null, language: 'javascript', difficulty: 'beginner', estimatedMinutes: 1, navigation: [{}], courseIcon: null } as never }))
     expect((await service.catalog(1)).page).toEqual({ limit: 1, count: 1 })
   })
 
@@ -48,7 +48,7 @@ describe('released Course catalog', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     vi.spyOn(service, 'exact').mockImplementation(async (contentId, version) => {
       if (contentId === releasedA) throw new DeliveryError('V2_ADAPTER_INCOMPATIBLE', 'Incompatible', 422, { errors: [{ code: 'asset.manifest-missing', path: '$.private.path' }] })
-      return { namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: 'Beta', description: '', language: 'javascript', difficulty: 'beginner', estimatedMinutes: 1, courseIcon: null } }
+      return { namespace: 'v2', contentType: 'course', contentId, publicationVersion: version, integrity: {} as never, warnings: [], course: { title: 'Beta', description: '', category: null, language: 'javascript', difficulty: 'beginner', estimatedMinutes: 1, navigation: [{}], courseIcon: null } as never }
     })
     try {
       const catalog = await service.catalog(10, 'catalog-correlation')

@@ -9,7 +9,7 @@ const allowed = (domain: ContentType) => blocksForDomain(domain).map((definition
 export const templateRegistry = {
   course: {
     contentType: 'course', displayName: 'Course', requiredMetadata: ['title', 'slug', 'status', 'locale'],
-    fixedFields: [field('title', 'Course title', 'text'), field('content.description', 'Description', 'text'), field('slug', 'Slug', 'slug'), field('content.language', 'Language', 'select'), field('content.difficulty', 'Difficulty', 'select'), field('content.estimatedMinutes', 'Estimated duration', 'number'), field('content.learningOutcomes', 'Learning outcomes', 'string-list'), field('content.modules', 'Modules and lessons', 'structure')],
+    fixedFields: [field('title', 'Course title', 'text'), field('content.description', 'Description', 'text'), field('slug', 'Slug', 'slug'), field('content.language', 'Language', 'select'), field('content.difficulty', 'Difficulty', 'select'), field('content.estimatedMinutes', 'Estimated duration', 'number'), field('content.learningOutcomes', 'Learning outcomes', 'string-list'), field('content.modules', 'Modules and lessons', 'structure'), field('content.courseMetadata.category', 'Category', 'text', false), field('content.defaultCompilerLanguage', 'Default compiler language', 'select', false)],
     structuralContainers: ['modules', 'sections', 'lessons'],
     flexibleRegions: [{ key: 'lesson.blocks', label: 'Lesson content', scope: 'lesson', allowedBlocks: allowed('course') }],
   },

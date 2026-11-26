@@ -13,7 +13,7 @@ type VersionRecord = { identity: z.infer<typeof publicationIdentitySchema>; sche
 export type DeliveryCourseEnvelope = { namespace: 'v2'; contentType: 'course'; contentId: string; publicationVersion: number; course: unknown; integrity: { artifactHash: string; documentHash: string; assetManifestHash: string; verified: true }; warnings: AdapterFinding[] }
 export const DEFAULT_COURSE_CATALOG_LIMIT = 24
 export const MAX_COURSE_CATALOG_LIMIT = 50
-export type CourseCatalogEntry = { contentId: string; publicationVersion: number; title: string; description: string; language: string; difficulty: string; estimatedMinutes: number; courseIcon: AssetDeliveryDescriptor | null; releasedAt: string }
+export type CourseCatalogEntry = { contentId: string; publicationVersion: number; title: string; description: string; category: string | null; language: string; difficulty: string; estimatedMinutes: number; lessonCount: number; courseIcon: AssetDeliveryDescriptor | null; releasedAt: string }
 export type CourseCatalogEnvelope = { namespace: 'v2'; contentType: 'course'; items: CourseCatalogEntry[]; page: { limit: number; count: number } }
 export type DeliveredAsset = { bytes: Uint8Array; contentType: 'image/png' | 'image/jpeg' | 'image/webp'; contentHash: string }
 export class DeliveryError extends Error { constructor(readonly code: string, message: string, readonly status: number, readonly details?: unknown) { super(message); this.name = 'DeliveryError' } }
@@ -40,7 +40,7 @@ export class CourseDeliveryService {
       const publicationVersion = Number(value.activeVersionNumber)
       try {
         const delivered = await this.exact(contentId, publicationVersion), course = delivered.course as LearnerCourse
-        return { contentId, publicationVersion: delivered.publicationVersion, title: course.title, description: course.description, language: course.language, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, courseIcon: course.courseIcon, releasedAt: value.updatedAt }
+        return courseCatalogEntry(contentId, delivered.publicationVersion, course, value.updatedAt)
       } catch (error) {
         if (!(error instanceof DeliveryError) || error.code !== 'V2_ADAPTER_INCOMPATIBLE') throw error
         const details = error.details as { errors?: AdapterFinding[] } | undefined
@@ -93,6 +93,7 @@ export class CourseDeliveryService {
 }
 
 export function isActivelyDiscoverable(state: unknown, visibility: unknown) { return state === 'published' && visibility === 'public' }
+export function courseCatalogEntry(contentId: string, publicationVersion: number, course: LearnerCourse, releasedAt: string): CourseCatalogEntry { return { contentId, publicationVersion, title: course.title, description: course.description, category: course.category, language: course.language, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, lessonCount: course.navigation.length, courseIcon: course.courseIcon, releasedAt } }
 export function normalizeCourseCatalogLimit(value: unknown) { const parsed = typeof value === 'string' ? Number(value) : value; return Number.isSafeInteger(parsed) && Number(parsed) > 0 ? Math.min(Number(parsed), MAX_COURSE_CATALOG_LIMIT) : DEFAULT_COURSE_CATALOG_LIMIT }
 export function resolveAssetDeliveryEndpoint(descriptor: AssetDeliveryDescriptor) { if (descriptor.namespace !== 'v2' || descriptor.kind !== 'versioned-v2-asset') throw new DeliveryError('V2_INTEGRITY_FAILURE', 'Invalid V2 asset descriptor', 422); return `/api/v2/delivery/courses/${encodeURIComponent(descriptor.contentId)}/versions/${descriptor.publicationVersion}/assets/${encodeURIComponent(descriptor.assetId)}` }
 export const deliveryCacheHeaders = (kind: 'catalog' | 'active' | 'version' | 'asset'): Record<string, string> => kind === 'catalog' ? { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' } : kind === 'active' ? { 'Cache-Control': 'private, no-store' } : { 'Cache-Control': 'private, no-cache', Vary: 'Authorization' }

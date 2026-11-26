@@ -34,8 +34,11 @@ describe('CloudCourseDraftRepository', () => {
   it('saves all three new Course authoring fields without transforming the document', async () => {
     const document = structuredClone(validCourseDocument) as CourseDocument
     document.content.courseIconAssetId = 'b0000000-0000-4000-8000-000000000011'
+    document.content.courseMetadata.category = 'Developer Tools'
+    document.content.defaultCompilerLanguage = 'typescript'
     const module = document.content.modules[0]
     if (module.organization !== 'lessons') throw new Error('fixture')
+    module.lessons[0].compilerLanguage = 'javascript'
     module.lessons[0].blocks.push({ id: 'b0000000-0000-4000-8000-000000000012', schemaVersion: 1, type: 'quiz', data: { question: 'Select', mode: 'single-correct', options: [{ id: 'b0000000-0000-4000-8000-000000000013', text: 'A', isCorrect: true }, { id: 'b0000000-0000-4000-8000-000000000014', text: 'B', isCorrect: false }] } } as never)
     const save = vi.fn(async (_id, received) => ({ ...dto(2), document: structuredClone(received) }))
     const repository = new CloudCourseDraftRepository(api({ save }))

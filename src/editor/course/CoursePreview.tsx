@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BookOpen, Bookmark, Braces, Check, ChevronDown, ChevronLeft, ChevronRight, Coins, Copy, Dumbbell, Flame, Lightbulb, Menu, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, RotateCcw, Sparkles, UserRound } from 'lucide-react'
 import { AuthenticatedAssetImage, ContentImage } from '../../assets/AssetPicker'
-import { calloutVariant, courseLanguage } from '../../content/blocks/coursePresentation'
+import { calloutVariant, courseLanguage, resolveCourseCompilerLanguage } from '../../content/blocks/coursePresentation'
 import type { ContentBlock } from '../../content/blocks/block.schemas'
 import type { CourseDocument } from '../../content/core/envelope'
 import { imageDisplayStyle, imagePresentation } from '../../content/blocks/imagePresentation'
@@ -81,7 +81,7 @@ export function CoursePreview({ document, initialLessonId, onExit }: { document:
   const [outlineCollapsed, setOutlineCollapsed] = useState(false), [compilerMinimized, setCompilerMinimized] = useState(false)
   const active = lessons[Math.min(activeIndex, Math.max(0, lessons.length - 1))], lesson = active?.lesson, progress = lessons.length ? activeIndex + 1 : 0
   const exercise = lesson?.blocks.find((block) => block.type === 'exercise' && block.data.language), code = lesson?.blocks.find((block) => block.type === 'code')
-  const compilerLanguage = exercise?.type === 'exercise' ? exercise.data.language : code?.type === 'code' ? code.data.language : 'python'
+  const compilerLanguage = resolveCourseCompilerLanguage(exercise?.type === 'exercise' ? exercise.data.language : undefined, lesson?.compilerLanguage, document.content.defaultCompilerLanguage)
   const compilerSource = exercise?.type === 'exercise' ? exercise.data.starterCode ?? '' : code?.type === 'code' ? code.data.code : '# Select a coding lesson to load starter code.'
   const expected = exercise?.type === 'exercise' ? exercise.data.publicTests?.map((test) => test.expectedOutput).join('\n') : lesson?.blocks.find((block) => block.type === 'expectedOutput')?.data.value
   const completed = new Set(lessons.slice(0, Math.max(0, activeIndex)).map(({ lesson: item }) => item.id))

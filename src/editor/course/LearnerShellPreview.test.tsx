@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { validCourseDocument } from '../../content/fixtures/validDocuments'
 import { CoursePreview, PREVIEW_LEARNER_STATE, PREVIEW_PORTAL_TARGET, PREVIEW_SAFETY_BOUNDARIES, lockPreviewScroll, previewCourseLessons, previewPaneClasses, previewPortalTarget } from './CoursePreview'
+import { resolveCourseCompilerLanguage } from '../../content/blocks/coursePresentation'
 
 vi.mock('../../assets/AssetPicker', () => ({ AuthenticatedAssetImage: ({ assetId, alt }: { assetId: string; alt: string }) => <img data-asset-id={assetId} alt={alt} />, ContentImage: ({ data }: { data: { alt: string } }) => <img alt={data.alt} /> }))
 
@@ -24,6 +25,8 @@ describe('YCoders learner shell Preview', () => {
     expect(PREVIEW_SAFETY_BOUNDARIES).toEqual(['no-progress-writes', 'no-completion-writes', 'no-reward-writes', 'no-compiler-execution', 'no-ai-requests'])
     expect(PREVIEW_LEARNER_STATE).toMatchObject({ streak: 0, coins: 0, compilerState: 'idle' })
   })
+
+  it('uses exercise, lesson, Course, then safe-fallback compiler precedence', () => { expect(resolveCourseCompilerLanguage('java', 'javascript', 'typescript')).toBe('java'); expect(resolveCourseCompilerLanguage(undefined, 'javascript', 'typescript')).toBe('javascript'); expect(resolveCourseCompilerLanguage(undefined, undefined, 'typescript')).toBe('typescript'); expect(resolveCourseCompilerLanguage(undefined, undefined, undefined)).toBe('python') })
 
   it('declares desktop, tablet, and mobile responsive Preview contracts without author controls in the learner pane', () => {
     const html = renderToStaticMarkup(<CoursePreview document={structuredClone(validCourseDocument)} />)

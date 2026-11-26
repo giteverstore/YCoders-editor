@@ -7,6 +7,7 @@ import { blockRegistry, createBlock } from './blocks/block.registry'
 import { blockSchema } from './blocks/block.schemas'
 import { richTextDocumentSchema } from './blocks/richText.schema'
 import { contentEnvelopeSchema } from './core/envelope'
+import type { CourseDocument } from './core/envelope'
 import { templateRegistry } from './templates/template.registry'
 import { validateContent } from './validation/validateContent'
 
@@ -40,6 +41,8 @@ describe('V2 content documents', () => {
     expect(result.success).toBe(false)
     if (!result.success) expect(result.issues.some((issue) => issue.message.includes('Duplicate structural IDs'))).toBe(true)
   })
+
+  it('accepts additive Course metadata for new publications and keeps historical Courses valid', () => { const historical = clone(validCourseDocument); expect(validateContent(historical).success).toBe(true); const current = clone(validCourseDocument) as CourseDocument; current.content.courseMetadata.category = 'Developer Tools'; current.content.defaultCompilerLanguage = 'typescript'; const module = current.content.modules[0]; if (module.organization !== 'lessons') throw new Error('Expected lessons'); module.lessons[0].compilerLanguage = 'javascript'; expect(validateContent(current).success).toBe(true); current.content.courseMetadata.category = '   '; expect(validateContent(current).success).toBe(false); current.content.courseMetadata.category = 'Developer Tools'; current.content.defaultCompilerLanguage = 'rust' as never; expect(validateContent(current).success).toBe(false) })
 
   it('rejects unknown block types including video', () => {
     expect(validateContent(invalidFixtures.unsupportedBlock).success).toBe(false)
