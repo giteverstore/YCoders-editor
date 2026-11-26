@@ -8,6 +8,7 @@ import { compareStableIds, sha256Canonical, validatePublicationCompatibility } f
 import { assertEmulatorTestEnvironment, EMULATOR_PROJECT_ID } from './emulatorSafety'
 import { getAssetServerDependencies, getPublicationServerDependencies, getServerDependencies } from './firebaseAdmin.server'
 import { hashBytes, V2_PUBLICATION_REQUEST_COLLECTION } from './publicationBackend'
+import { V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts'
 import { handlePublicationApi } from './publicationApi'
 
 const password = 'Emulator-password-123!'
@@ -108,6 +109,48 @@ describe('immutable publication backend', () => {
     expect(((await getPublicationServerDependencies().backend.version(document.id, 2)) as { assetManifest: typeof manifest }).assetManifest[0].publishedObjectPath).toBe(manifest[0].publishedObjectPath)
   })
 
+  it('validates a corrected prospective v2 candidate without leaking incompatible v1 findings', async () => {
+    const firestore = getFirestore(), backend = getPublicationServerDependencies().backend
+    const catalogRef = firestore.doc('publishedContent/prospective-v2-isolation')
+    await catalogRef.set({ untouched: true })
+    const assetId = '91100000-0000-4000-8000-000000000011', bytes = new Uint8Array(24)
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); bytes[19] = 2; bytes[23] = 3
+    await getAssetServerDependencies().repository.create({ id: assetId, originalFilename: 'course-icon.png', objectPath: `editor-v2-assets/${assetId}/course-icon.png`, mimeType: 'image/png', size: bytes.length, width: 2, height: 3, createdBy: tokens.get('CONTENT_ADMIN')!.uid }, bytes)
+    const document = structuredClone(validCourseDocument) as ContentDocument
+    document.id = '91100000-0000-4000-8000-000000000001'; document.slug = 'prospective-v2-course'
+    if (document.contentType !== 'course') throw new Error('Expected Course')
+    document.content.courseIconAssetId = assetId
+    await getServerDependencies().repository.create(document, tokens.get('CONTENT_EDITOR')!.uid)
+    const actorUid = tokens.get('CONTENT_ADMIN')!.uid, first = await backend.prepare(document.id, 1, actorUid)
+    await backend.publish({ contentId: document.id, expectedDraftRevision: 1, expectedPointerRevision: 0, requestId: crypto.randomUUID(), confirmation: confirmationFromPreparation(first) }, actorUid)
+
+    const versionRef = firestore.collection(V2_PUBLICATION_COLLECTION).doc(document.id).collection('versions').doc('1')
+    const v1 = (await versionRef.get()).data()!
+    const historicalFinding = { domain: 'course', severity: 'error', path: '$.content.courseIconAssetId', code: 'course.icon-manifest-missing', explanation: 'The Course icon is absent from the immutable publication asset manifest.', requiredAction: 'Repair the publication manifest before learner delivery.', evidence: 'confirmed-by-inspected-source' }
+    await versionRef.update({ assetManifest: [], compatibilitySnapshot: { ...(v1.compatibilitySnapshot as object), learnerIntegrationReady: false, findings: [historicalFinding] } })
+    const incompatibleV1 = await backend.version(document.id, 1)
+
+    const corrected = structuredClone(document); corrected.documentVersion = 2; corrected.updatedAt = '2026-11-26T00:00:00.000Z'
+    await getServerDependencies().repository.save(document.id, corrected, 1, tokens.get('CONTENT_EDITOR')!.uid)
+    const preparation = await backend.prepare(document.id, 2, actorUid)
+    expect(preparation).toMatchObject({ currentActiveVersion: 1, proposedVersionNumber: 2, learnerIntegrationReady: true, canPublish: true })
+    expect(preparation.assetIds).toContain(assetId)
+    expect(preparation.findings).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'course.icon-manifest-missing' })]))
+    expect(await backend.version(document.id, 1)).toEqual(incompatibleV1)
+
+    await backend.publish({ contentId: document.id, expectedDraftRevision: 2, expectedPointerRevision: preparation.pointerRevision, requestId: crypto.randomUUID(), confirmation: confirmationFromPreparation(preparation) }, actorUid)
+    const v2 = await backend.version(document.id, 2) as { assetManifest: Array<{ assetId: string }>; compatibilitySnapshot: { learnerIntegrationReady: boolean; findings: Array<{ code: string }> } }
+    expect(v2.assetManifest.map(({ assetId: id }) => id)).toContain(assetId)
+    expect(v2.compatibilitySnapshot).toMatchObject({ learnerIntegrationReady: true, findings: [] })
+    expect(await backend.version(document.id, 1)).toEqual(incompatibleV1)
+
+    const stale = structuredClone(corrected); stale.documentVersion = 3; stale.updatedAt = '2026-11-26T00:01:00.000Z'; stale.content.courseIconAssetId = '91100000-0000-4000-8000-000000000099'
+    await getServerDependencies().repository.save(document.id, stale, 2, tokens.get('CONTENT_EDITOR')!.uid)
+    await expect(backend.prepare(document.id, 3, actorUid)).rejects.toMatchObject({ code: 'ASSET_NOT_FOUND', status: 422 })
+    expect(await backend.version(document.id, 3)).toBeNull()
+    expect((await catalogRef.get()).data()).toEqual({ untouched: true })
+  })
+
   it('blocks preparation when a selected Course icon is absent from the managed asset registry', async () => {
     const document = structuredClone(validCourseDocument) as ContentDocument
     document.id = '91000000-0000-4000-8000-000000000010'; document.slug = 'missing-icon-course'
@@ -182,6 +225,7 @@ async function confirmationFor(document: ContentDocument, draftRevision: number,
   const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }), findings = [...compatibility.findings, ...(previous ? compareStableIds(previous, document) : [])]
   return { contentId: document.id, contentType: document.contentType, draftRevision, documentVersion: document.documentVersion, draftFingerprint: await sha256Canonical(document), validationFingerprint: await sha256Canonical({ ...compatibility, findings }), pointerRevision, proposedVersionNumber: version, assetManifestHash: await sha256Canonical(manifest), assetIds: manifest.map(({ assetId }) => assetId), actorUid, operation, issuedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(), completedSteps: [true, true, true] as const }
 }
+function confirmationFromPreparation(preparation: Awaited<ReturnType<ReturnType<typeof getPublicationServerDependencies>['backend']['prepare']>>) { return { contentId: preparation.contentId, contentType: preparation.contentType, draftRevision: preparation.draftRevision, documentVersion: preparation.documentVersion, draftFingerprint: preparation.draftFingerprint, validationFingerprint: preparation.validationFingerprint, pointerRevision: preparation.pointerRevision, proposedVersionNumber: preparation.proposedVersionNumber, assetManifestHash: preparation.assetManifestHash, assetIds: preparation.assetIds, actorUid: preparation.actorUid, operation: preparation.operation, issuedAt: preparation.issuedAt, expiresAt: preparation.expiresAt, completedSteps: [true, true, true] as const } }
 type LifecycleAction = 'release' | 'rollback' | 'unpublish' | 'republish' | 'disable' | 'enable' | 'archive'
 async function lifecycleThroughApi(contentId: string, pointer: NonNullable<Awaited<ReturnType<ReturnType<typeof getPublicationServerDependencies>['backend']['pointer']>>>, operation: LifecycleAction, targetVersion: number | null, role: 'SUPER_ADMIN' | 'CONTENT_ADMIN') { return callApi(contentId, 'POST', operation, lifecycleBody(contentId, pointer, operation, targetVersion, tokens.get(role)!.uid), role) }
 function lifecycleBody(contentId: string, pointer: { contentType: string; revision: number; state: string; visibility: string; activeVersionNumber: number | null }, operation: LifecycleAction, targetVersion: number | null, actorUid: string) { const issued = new Date(); return { expectedPointerRevision: pointer.revision, targetVersion, requestId: crypto.randomUUID(), confirmation: { contentId, contentType: pointer.contentType, actorUid, operation, expectedPointerRevision: pointer.revision, currentState: pointer.state, currentVisibility: pointer.visibility, currentActiveVersion: pointer.activeVersionNumber, targetVersion, issuedAt: issued.toISOString(), expiresAt: new Date(issued.getTime() + 60_000).toISOString(), confirmed: true, archiveConfirmed: operation === 'archive' } } }

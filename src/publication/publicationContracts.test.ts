@@ -23,7 +23,7 @@ describe('final publication contracts', () => {
   it('surfaces adapter findings in Course readiness instead of false with no findings', () => {
     const document = structuredClone(validCourseDocument)
     document.content.courseIconAssetId = uuid('9')
-    const report = courseCompatibility(document, [], validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('9')]) }))
+    const report = courseCompatibility(document, [], 2, validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('9')]) }))
     expect(report.learnerIntegrationReady).toBe(false)
     expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'course.icon-manifest-missing', path: '$.content.courseIconAssetId' })]))
   })

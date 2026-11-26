@@ -120,9 +120,10 @@ export class PublicationBackend {
     if (draft.revision !== expectedDraftRevision) throw new PublicationError('DRAFT_CONFLICT', 'Draft revision changed', 409, { currentRevision: draft.revision })
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document), manifest = await this.planAssets(assets)
-    const compatibility = courseCompatibility(document, manifest, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const pointer = await this.pointer(contentId)
     if (pointer && !canTransition(pointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${pointer.state}`, 409)
+    const proposedVersionNumber = (pointer?.latestVersionNumber ?? 0) + 1
+    const compatibility = courseCompatibility(document, manifest, proposedVersionNumber, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previous = pointer?.activeVersionNumber ? await this.version(contentId, pointer.activeVersionNumber) : null
     const findings = [...compatibility.findings, ...(previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : [])]
     const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest)
@@ -130,7 +131,7 @@ export class PublicationBackend {
     return { title: document.title, contentId, contentType: document.contentType, actorUid, draftRevision: draft.revision,
       documentVersion: document.documentVersion, draftFingerprint: documentHash, validationFingerprint: validationHash,
       pointerRevision: pointer?.revision ?? 0, currentState: pointer?.state ?? 'draft', currentVisibility: pointer?.visibility ?? 'hidden',
-      currentActiveVersion: pointer?.activeVersionNumber ?? null, proposedVersionNumber: (pointer?.latestVersionNumber ?? 0) + 1,
+      currentActiveVersion: pointer?.activeVersionNumber ?? null, proposedVersionNumber,
       operation: pointer ? 'publish-new-version' : 'publish', resultingVisibility: 'private', ...compatibility, findings,
       assetIds: manifest.map(({ assetId }) => assetId), assetManifestHash: manifestHash, issuedAt: issued.toISOString(),
       expiresAt: new Date(issued.getTime() + 10 * 60_000).toISOString(),
@@ -154,16 +155,16 @@ export class PublicationBackend {
     const document = contentEnvelopeSchema.parse(draft.document)
     const assets = await this.resolveAssets(document)
     const manifest = await this.planAssets(assets)
-    const compatibility = courseCompatibility(document, manifest, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previousPointer = await this.pointer(input.contentId)
     if (previousPointer && !canTransition(previousPointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${previousPointer.state}`, 409)
+    const proposedVersion = (previousPointer?.latestVersionNumber ?? 0) + 1
+    const compatibility = courseCompatibility(document, manifest, proposedVersion, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previous = previousPointer?.activeVersionNumber ? await this.version(input.contentId, previousPointer.activeVersionNumber) : null
     const stableFindings = previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : []
     const findings = [...compatibility.findings, ...stableFindings]
     if (!compatibility.schemaValid || !compatibility.storageReady || findings.some(({ severity }) => severity === 'error')) throw new PublicationError('PUBLICATION_INVALID', 'Publication validation failed', 422, findings)
     const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest), validationHash = await sha256Canonical({ ...compatibility, findings })
     const pointerRevision = previousPointer?.revision ?? 0
-    const proposedVersion = (previousPointer?.latestVersionNumber ?? 0) + 1
     this.verifyConfirmation(input.confirmation, { actorUid, document, draftRevision: draft.revision, documentHash, validationHash, manifestHash, assetIds: manifest.map(({ assetId }) => assetId), pointerRevision, proposedVersion, operation: previousPointer ? 'publish-new-version' : 'publish' })
     const reservation = await this.reserve(input, actorUid, document, payloadHash)
     if (reservation.result) return { ...reservation.result, replayed: true }
@@ -231,9 +232,9 @@ export class PublicationBackend {
   private pointerRef(contentId: string) { return this.firestore.collection(V2_PUBLICATION_COLLECTION).doc(contentId) }
 }
 
-export function courseCompatibility(document: ContentDocument, manifest: Manifest, compatibility: ReturnType<typeof validatePublicationCompatibility>): ReturnType<typeof validatePublicationCompatibility> {
+export function courseCompatibility(document: ContentDocument, manifest: Manifest, proposedVersionNumber: number, compatibility: ReturnType<typeof validatePublicationCompatibility>): ReturnType<typeof validatePublicationCompatibility> {
   if (document.contentType !== 'course' || !compatibility.schemaValid) return compatibility
-  const adapted = adaptCourse({ identity: { namespace: 'v2', contentType: 'course', contentId: document.id, publicationVersion: 1 }, document, assetManifest: manifest })
+  const adapted = adaptCourse({ identity: { namespace: 'v2', contentType: 'course', contentId: document.id, publicationVersion: proposedVersionNumber }, document, assetManifest: manifest })
   const adapterFindings = adapted.ok ? adapted.warnings : [...adapted.errors, ...adapted.warnings]
   const findings = [...compatibility.findings, ...adapterFindings.map(({ domain, severity, path, code, message, requiredAction }) => ({ domain, severity, path, code, explanation: message, requiredAction, evidence: 'confirmed-by-inspected-source' as const }))]
   const ready = adapted.ok && compatibility.learnerRuntimeCompatible && !findings.some(({ severity }) => severity === 'error')
