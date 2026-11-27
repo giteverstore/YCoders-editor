@@ -15,7 +15,9 @@ function service({ state = 'published', visibility = 'public', compatible = true
   if (asset) document.content.instructions.push({ id:'60000000-0000-4000-8000-000000000002', type:'image', schemaVersion:BLOCK_SCHEMA_VERSION, data:{ assetId, alt:'Diagram' } } as never)
   const artifact = Buffer.from(canonicalJson(document)), manifest = asset ? [{ assetId, mimeType:'image/png', byteLength:image.length, width:1, height:1, contentHash:sha(image), publishedObjectPath:`editor-v2-published-assets/sha256/${sha(image).slice(7)}.png` }] : []
   const record = { identity:{ namespace:'v2', contentType:'practice', contentId:document.id, publicationVersion:1 }, schemaVersion:'2.0.0', artifactPath:`editor-v2-publications/${document.id}/v1.json`, artifactHash:sha(artifact), documentHash:sha(Buffer.from(canonicalJson(document))), assetManifest:manifest, assetManifestHash:sha(Buffer.from(canonicalJson(manifest))), status:'READY' }
-  const firestore = { collection: () => ({ doc: () => ({ get: async () => ({ exists:true, data:() => ({ namespace:'v2', contentType:'practice', state, visibility, activeVersionNumber:1 }) }), collection: () => ({ doc: () => ({ get:async () => ({ exists:true, data:() => record }) }) }) }) }) }
+  const pointer = { id:document.id, data:() => ({ namespace:'v2', contentType:'practice', contentId:document.id, state, visibility, activeVersionNumber:1 }) }
+  const query = { where:() => query, orderBy:() => query, get:async () => ({ docs: state === 'published' && visibility === 'public' ? [pointer] : [] }) }
+  const firestore = { collection: () => ({ ...query, doc: () => ({ get: async () => ({ exists:true, data:pointer.data }), collection: () => ({ doc: () => ({ get:async () => ({ exists:true, data:() => record }) }) }) }) }) }
   const bucket = { file: (path:string) => ({ download:async () => [path === record.artifactPath ? artifact : image] }) }
   return new PracticeDeliveryService(firestore as never, bucket as never)
 }
@@ -26,6 +28,19 @@ describe('Practice delivery', () => {
     expect(active).toMatchObject({ contentType:'practice', publicationVersion:1, practice:{ executionAssurance:'browser-public-tests' } })
     expect(exact.integrity.verified).toBe(true)
     expect(JSON.stringify(active)).not.toMatch(/referenceSolutions|publishedObjectPath|draftRevision/)
+  })
+  it('projects only safe metadata for published discoverable Practice candidates', async () => {
+    const candidates = await service().candidates('correlation')
+    expect(candidates).toEqual([expect.objectContaining({ namespace:'v2', contentType:'practice', contentId:validPracticeDocument.id, activePublicationVersion:1, state:'published', discoverable:true, executionCompatible:true, publicTestsValid:true, learnerDtoReady:true })])
+    expect(candidates[0]?.supportedLanguages.length).toBeGreaterThan(0)
+    expect(JSON.stringify(candidates)).not.toMatch(/starterCode|"publicTests"|referenceSolutions|trustedVerification|privateTests|publishedObjectPath|draftRevision/)
+  })
+  it('excludes unpublished and hidden Practice pointers from candidates', async () => {
+    await expect(service({ state:'archived' }).candidates()).resolves.toEqual([])
+    await expect(service({ visibility:'hidden' }).candidates()).resolves.toEqual([])
+  })
+  it('excludes adapter-incompatible Practice from candidates', async () => {
+    await expect(service({ compatible:false }).candidates()).resolves.toEqual([])
   })
   it('rejects archived active discovery while exact history remains readable', async () => {
     const archived = service({ state:'archived', visibility:'hidden' })

@@ -1,16 +1,18 @@
 import { createHash } from 'node:crypto'
-import type { Firestore } from 'firebase-admin/firestore'
+import { FieldPath, type Firestore } from 'firebase-admin/firestore'
 import type { getStorage } from 'firebase-admin/storage'
 import { z } from 'zod'
 import { contentEnvelopeSchema, type PracticeDocument } from '../content/core/envelope.js'
+import { uuidSchema } from '../content/core/identifiers.js'
 import { assetManifestEntrySchema, canonicalJson, contentHashSchema, publicationIdentitySchema, V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts.js'
 import { adaptPractice } from '../integration/learnerAdapters.js'
-import type { AdapterFinding, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types.js'
+import type { AdapterFinding, LearnerPractice, PublishedAssetManifestEntry } from '../integration/learnerAdapter.types.js'
 import { DeliveryError, deliveryCacheHeaders, type DeliveredAsset } from './courseDelivery.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 type VersionRecord = { identity: z.infer<typeof publicationIdentitySchema>; schemaVersion: string; artifactPath: string; artifactHash: string; documentHash: string; assetManifest: z.infer<typeof assetManifestEntrySchema>[]; assetManifestHash: string; status: string }
 export type DeliveryPracticeEnvelope = { namespace: 'v2'; contentType: 'practice'; contentId: string; publicationVersion: number; practice: unknown; integrity: { artifactHash: string; documentHash: string; assetManifestHash: string; verified: true }; warnings: AdapterFinding[] }
+export type PracticeCandidate = { namespace: 'v2'; contentType: 'practice'; contentId: string; activePublicationVersion: number; title: string; difficulty: LearnerPractice['difficulty']; topics: string[]; tags: string[]; state: 'published'; discoverable: true; supportedLanguages: string[]; executionCompatible: true; publicTestsValid: true; learnerDtoReady: true }
 
 export class PracticeDeliveryService {
   constructor(private readonly firestore: Firestore, private readonly bucket: Bucket) {}
@@ -22,6 +24,28 @@ export class PracticeDeliveryService {
     if (value.namespace !== 'v2' || value.contentType !== 'practice') throw new DeliveryError('V2_CONTENT_NOT_FOUND', 'V2 Practice not found', 404)
     if (value.state !== 'published' || value.visibility !== 'public' || !value.activeVersionNumber) throw new DeliveryError('V2_NOT_DISCOVERABLE', 'V2 Practice is not available through active discovery', 404)
     return this.exact(contentId, value.activeVersionNumber)
+  }
+
+  async candidates(correlationId?: string): Promise<PracticeCandidate[]> {
+    const snapshot = await this.firestore.collection(V2_PUBLICATION_COLLECTION)
+      .where('contentType', '==', 'practice').where('state', '==', 'published').where('visibility', '==', 'public')
+      .orderBy('updatedAt', 'desc').orderBy(FieldPath.documentId(), 'asc').get()
+    const candidates = await Promise.all(snapshot.docs.map(async (pointer) => {
+      const value = pointer.data() as { contentId?: unknown; activeVersionNumber?: unknown }
+      const contentId = typeof value.contentId === 'string' ? value.contentId : pointer.id
+      if (!uuidSchema.safeParse(contentId).success || !Number.isSafeInteger(value.activeVersionNumber) || Number(value.activeVersionNumber) < 1) throw new DeliveryError('V2_INTEGRITY_FAILURE', 'Published Practice pointer identity is invalid', 503)
+      const activePublicationVersion = Number(value.activeVersionNumber)
+      try {
+        const delivered = await this.exact(contentId, activePublicationVersion), practice = delivered.practice as LearnerPractice
+        if (!practice.publicTests.length || !practice.languages.supported.length) return null
+        return { namespace:'v2', contentType:'practice', contentId, activePublicationVersion, title:practice.title, difficulty:practice.difficulty, topics:[...practice.topics], tags:[...practice.tags], state:'published', discoverable:true, supportedLanguages:practice.languages.supported.map(({ id }) => id), executionCompatible:true, publicTestsValid:true, learnerDtoReady:true } satisfies PracticeCandidate
+      } catch (error) {
+        if (!(error instanceof DeliveryError) || error.code !== 'V2_ADAPTER_INCOMPATIBLE') throw error
+        console.warn('v2_gateway.practice_candidate_incompatible', { contentId, activePublicationVersion, correlationId:correlationId ?? null })
+        return null
+      }
+    }))
+    return candidates.filter((candidate): candidate is PracticeCandidate => candidate !== null)
   }
 
   async exact(contentId: string, version: number): Promise<DeliveryPracticeEnvelope> {

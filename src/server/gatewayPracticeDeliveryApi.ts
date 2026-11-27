@@ -8,6 +8,8 @@ import type { GatewayDeliveryRequest, GatewayDeliveryResult } from './gatewayCou
 export async function handleGatewayPracticeDeliveryApi(request: GatewayDeliveryRequest, dependencies: { verifier: GatewayServiceVerifier; service: PracticeDeliveryService }): Promise<GatewayDeliveryResult> {
   try {
     const principal = await dependencies.verifier.verify({ authorization: request.authorization, method: request.method, path: request.path, correlationId: request.correlationId })
+    if (request.kind === 'candidates' && request.method !== 'GET') return failure(405, 'V2_METHOD_NOT_ALLOWED', 'Use GET for V2 Practice candidates', principal.correlationId)
+    if (request.kind === 'candidates') return success(await dependencies.service.candidates(principal.correlationId), 'candidates', principal.correlationId)
     if (!request.contentId || !uuidSchema.safeParse(request.contentId).success) return failure(422, 'V2_CONTENT_NOT_FOUND', 'A valid explicit V2 Practice ID is required', principal.correlationId)
     if (request.kind === 'active') return success(await dependencies.service.active(request.contentId), 'active', principal.correlationId)
     const version = Number(request.version); if (!Number.isSafeInteger(version) || version < 1) return failure(422, 'V2_VERSION_NOT_FOUND', 'A positive publication version is required', principal.correlationId)
@@ -22,5 +24,5 @@ export async function handleGatewayPracticeDeliveryApi(request: GatewayDeliveryR
     return failure(500, 'V2_DELIVERY_FAILURE', 'V2 Practice gateway delivery could not be completed', request.correlationId)
   }
 }
-const success = (data: unknown, kind: 'active'|'version', correlationId: string): GatewayDeliveryResult => ({ status: 200, headers: { ...deliveryCacheHeaders(kind), 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'X-Correlation-Id': correlationId }, body: { ok: true, data } })
+const success = (data: unknown, kind: 'candidates'|'active'|'version', correlationId: string): GatewayDeliveryResult => ({ status: 200, headers: { ...(kind === 'candidates' ? { 'Cache-Control': 'private, no-store' } : deliveryCacheHeaders(kind)), 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'X-Correlation-Id': correlationId }, body: { ok: true, data } })
 const failure = (status: number, code: string, message: string, correlationId?: string, details?: unknown): GatewayDeliveryResult => ({ status, headers: { 'Cache-Control': 'private, no-store', 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', ...(correlationId ? { 'X-Correlation-Id': correlationId } : {}) }, body: { ok: false, error: { code, message, ...(correlationId ? { correlationId } : {}), ...(details === undefined ? {} : { details }) } } })

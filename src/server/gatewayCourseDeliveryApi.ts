@@ -3,7 +3,7 @@ import { uuidSchema } from '../content/core/identifiers.js'
 import { CourseDeliveryService, DeliveryError, deliveryCacheHeaders, normalizeCourseCatalogLimit } from './courseDelivery.js'
 import { GatewayServiceAuthError, type GatewayServiceVerifier } from './gatewayServiceAuth.js'
 
-export type GatewayDeliveryRequest = { authorization?: string; correlationId?: string; method: string; path: string; contentId?: string; version?: string; assetId?: string; limit?: string; kind: 'catalog'|'active'|'version'|'asset' }
+export type GatewayDeliveryRequest = { authorization?: string; correlationId?: string; method: string; path: string; contentId?: string; version?: string; assetId?: string; limit?: string; kind: 'catalog'|'candidates'|'active'|'version'|'asset' }
 export type GatewayDeliveryResult = { status: number; headers: Record<string,string>; body?: unknown; bytes?: Uint8Array }
 
 export async function handleGatewayCourseDeliveryApi(request: GatewayDeliveryRequest, dependencies: { verifier: GatewayServiceVerifier; service: CourseDeliveryService }): Promise<GatewayDeliveryResult> {

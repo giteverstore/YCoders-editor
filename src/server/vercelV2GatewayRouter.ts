@@ -21,6 +21,7 @@ export async function runV2GatewayRouter(request: VercelRequest, response: Verce
   const handler = typeof handlers === 'function' ? handlers : handlers[path[offset] as keyof GatewayHandlers]
   if (internalRoute && !gatewayPath) request.url = request.url?.replace(/^\/api\/internal-v2-gateway/, '/api/v2/gateway')
   if (path[offset] === 'courses' && path.length === offset + 1) return runDelivery(request, response, handler, 'catalog')
+  if (path[offset] === 'practice' && path[offset + 1] === 'candidates' && path.length === offset + 2) return runDelivery(request, response, handler, 'candidates')
   if (!path[offset + 1]) return notFound(response)
   if (path.length === offset + 2) return runDelivery(request, response, handler, 'active', path[offset + 1])
   if (path.length === offset + 4 && path[offset + 2] === 'versions') return runDelivery(request, response, handler, 'version', path[offset + 1], path[offset + 3])
@@ -28,7 +29,7 @@ export async function runV2GatewayRouter(request: VercelRequest, response: Verce
   return notFound(response)
 }
 
-function runDelivery(request: VercelRequest, response: VercelResponse, handler: GatewayHandler, kind: 'catalog' | 'active' | 'version' | 'asset', contentId?: string, version?: string, assetId?: string) {
+function runDelivery(request: VercelRequest, response: VercelResponse, handler: GatewayHandler, kind: 'catalog' | 'candidates' | 'active' | 'version' | 'asset', contentId?: string, version?: string, assetId?: string) {
   request.query = { ...request.query, ...(contentId ? { contentId } : {}), ...(version ? { version } : {}), ...(assetId ? { assetId } : {}) }
   return handler(request, response, kind)
 }
