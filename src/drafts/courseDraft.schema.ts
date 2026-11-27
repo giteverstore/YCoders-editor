@@ -39,7 +39,7 @@ export const courseDraftDocumentSchema: z.ZodType<CourseDocument> = z.object({
   document.content.modules.forEach((module, moduleIndex) => {
     visit(module.id, ['content', 'modules', moduleIndex, 'id'])
     const groups = module.organization === 'lessons' ? [{ lessons: module.lessons, path: ['content', 'modules', moduleIndex, 'lessons'] as Array<string | number> }] : module.sections.map((section, sectionIndex) => { visit(section.id, ['content', 'modules', moduleIndex, 'sections', sectionIndex, 'id']); return { lessons: section.lessons, path: ['content', 'modules', moduleIndex, 'sections', sectionIndex, 'lessons'] as Array<string | number> } })
-    groups.forEach((group) => group.lessons.forEach((lesson, lessonIndex) => { visit(lesson.id, [...group.path, lessonIndex, 'id']); lesson.blocks.forEach((block, blockIndex) => visit(block.id, [...group.path, lessonIndex, 'blocks', blockIndex, 'id'])) }))
+    groups.forEach((group) => group.lessons.forEach((lesson, lessonIndex) => { visit(lesson.id, [...group.path, lessonIndex, 'id']); lesson.blocks.forEach((block, blockIndex) => { const blockPath = [...group.path, lessonIndex, 'blocks', blockIndex] as Array<string | number>; visit(block.id, [...blockPath, 'id']); if (block.type === 'hint') block.data.hints.forEach((hint, hintIndex) => visit(hint.id, [...blockPath, 'data', 'hints', hintIndex, 'id'])) }) }))
   })
 })
 

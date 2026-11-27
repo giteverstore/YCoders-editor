@@ -105,6 +105,27 @@ describe('course editor commands', () => {
     expect(findLesson(removed, lessonId)?.blocks).toHaveLength(2)
     expect(findLesson(original, lessonId)?.blocks).toHaveLength(0)
   })
+
+  it('creates and duplicates multi-item hint blocks with independent stable item IDs', () => {
+    const factory = ids()
+    const original = createCourseDocument(factory)
+    const module = original.content.modules[0]
+    if (module.organization !== 'lessons') throw new Error('fixture')
+    const lessonId = module.lessons[0].id
+    const added = addBlock(original, lessonId, 'hint', factory)
+    const block = findLesson(added, lessonId)?.blocks[0]
+    if (block?.type !== 'hint') throw new Error('fixture')
+    block.data.hints.push({ id: factory(), title: 'Hint 2', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second' }] }] } })
+    const reorderedIds = [block.data.hints[1], block.data.hints[0]].map(({ id }) => id)
+    block.data.hints = [block.data.hints[1], block.data.hints[0]]
+    expect(block.data.hints.map(({ id }) => id)).toEqual(reorderedIds)
+    block.data.hints.splice(1, 1)
+    expect(block.data.hints[0].id).toBe(reorderedIds[0])
+    const duplicated = duplicateBlock(added, lessonId, block.id, factory)
+    const blocks = findLesson(duplicated, lessonId)?.blocks
+    if (blocks?.[0].type !== 'hint' || blocks[1].type !== 'hint') throw new Error('fixture')
+    expect(blocks[1].data.hints[0].id).not.toBe(blocks[0].data.hints[0].id)
+  })
 })
 
 describe('course editor history', () => {

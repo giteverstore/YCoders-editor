@@ -3,7 +3,7 @@ import type { ContentBlock } from '../content/blocks/block.schemas.js'
 import type { AdapterFinding, AdapterResult, AdapterSource, AssetDeliveryDescriptor, LearnerBlock, LearnerChallenge, LearnerCourse, LearnerIdentity, LearnerPractice, LearnerProject, LearnerProjectValidator } from './learnerAdapter.types.js'
 import { practiceArgumentTypeSchema, practiceExecutionModeSchema, practiceLanguageIdSchema, practiceResultTypeSchema, practiceSemanticValidatorIdSchema } from '../content/domains/practice/practice.execution.js'
 
-export const SUPPORTED_COURSE_BLOCKS = Object.freeze(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'] as const)
+export const SUPPORTED_COURSE_BLOCKS = Object.freeze(['richText', 'image', 'code', 'callout', 'hint', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'] as const)
 const supportedBlocks = new Set<string>(SUPPORTED_COURSE_BLOCKS)
 const finding = (domain: AdapterFinding['domain'], code: string, path: string, message: string, requiredAction: string, severity: AdapterFinding['severity'] = 'error'): AdapterFinding => ({ domain, code, severity, path, message, requiredAction })
 const fail = <T>(errors: AdapterFinding[], classification: 'requires-learner-upgrade' | 'requires-v2-schema-change' | 'invalid-publication', warnings: AdapterFinding[] = []): AdapterResult<T> => ({ ok: false, errors, warnings, classification })
@@ -55,6 +55,7 @@ function adaptBlocks(source: AdapterSource, blocks: ContentBlock[], path: string
         },
       } as LearnerBlock]
     }
+    if (block.type === 'hint') return [{ ...block, data: { hints: block.data.hints.map(({ id, title, content }) => ({ id, title, content: structuredClone(content) })) } } as LearnerBlock]
     if (block.type !== 'image') return [structuredClone(block) as LearnerBlock]
     if (!('assetId' in block.data)) { errors.push(finding(source.document.contentType, 'asset.external', `${path}[${index}].data`, 'External image URLs are not version-addressed V2 assets.', 'Publish the image through the immutable asset manifest.')); return [] }
     if (!manifest.has(block.data.assetId)) { errors.push(finding(source.document.contentType, 'asset.manifest-missing', `${path}[${index}].data.assetId`, 'The image is absent from the immutable asset manifest.', 'Repair the publication before learner delivery.')); return [] }

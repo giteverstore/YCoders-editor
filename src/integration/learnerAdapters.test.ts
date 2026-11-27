@@ -61,7 +61,7 @@ describe('pure learner adapters', () => {
     const delivered = result.value.modules[0].lessons?.[0].blocks ?? []
     expect(delivered.find(({ id }) => id === expectedOutput.id)).toEqual(expectedOutput)
     expect(delivered.find(({ id }) => id === solution.id)).toEqual(solution)
-    expect(SUPPORTED_COURSE_BLOCKS).toEqual(['richText', 'image', 'code', 'callout', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'])
+    expect(SUPPORTED_COURSE_BLOCKS).toEqual(['richText', 'image', 'code', 'callout', 'hint', 'divider', 'table', 'quiz', 'exercise', 'expectedOutput', 'solution'])
   })
   it('rejects removed lesson IDs, unsupported blocks, and implicit namespaces', () => { expect(adaptCourse(fixtures.courseRemovedLessonFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.lesson-id-removed' }] }); expect(adaptCourse(fixtures.courseUnsupportedBlockFixture)).toMatchObject({ ok: false, errors: [{ code: 'block.unsupported' }] }); expect(adaptCourse(fixtures.wrongNamespaceFixture as never)).toMatchObject({ ok: false, classification: 'invalid-publication' }) })
   it('rejects duplicate structural IDs and invalid navigation targets', () => { expect(adaptCourse(fixtures.courseDuplicateIdFixture)).toMatchObject({ ok: false, classification: 'invalid-publication' }); expect(adaptCourse(fixtures.courseInvalidNavigationFixture)).toMatchObject({ ok: false, errors: [{ code: 'course.navigation-target-invalid' }] }) })

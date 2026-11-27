@@ -17,6 +17,7 @@ export type AdapterSource<T extends ContentDocument = ContentDocument> = { ident
 export type LearnerIdentity = { namespace: 'v2'; contentType: ContentType; contentId: string; publicationVersion: number }
 export type AssetDeliveryDescriptor = { kind: 'versioned-v2-asset'; namespace: 'v2'; contentId: string; publicationVersion: number; assetId: string; deliveryKey: string }
 export type LearnerBlock = Omit<ContentBlock, 'data'> & { data: unknown }
+export type LearnerHintData = Extract<ContentBlock, { type: 'hint' }>['data']
 
 export type LearnerCourse = { identity: LearnerIdentity; courseId: string; title: string; description: string; category: string | null; language: string; difficulty: string; estimatedMinutes: number; defaultCompilerLanguage: PracticeLanguageId | null; learningOutcomes: string[]; prerequisites: string[]; courseIcon: AssetDeliveryDescriptor | null; defaultLessonId: string; modules: Array<{ id: string; title: string; organization: 'lessons' | 'sections'; lessons?: LearnerLesson[]; sections?: Array<{ id: string; title: string; lessons: LearnerLesson[] }> }>; navigation: Array<{ lessonId: string; previousLessonId: string | null; nextLessonId: string | null }> }
 export type LearnerLesson = { id: string; title: string; estimatedMinutes: number; compilerLanguage: PracticeLanguageId | null; blocks: LearnerBlock[] }

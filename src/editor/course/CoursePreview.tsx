@@ -40,12 +40,21 @@ function QuizPreview({ block }: { block: Extract<ContentBlock, { type: 'quiz' }>
   return <section className="learner-quiz content-section"><span className="learner-interactive-icon"><Lightbulb size={20} aria-hidden="true" /></span><div><span className="learner-kicker">Knowledge check</span><h3>{block.data.question}</h3><div className="learner-quiz-options">{block.data.options.map((option) => <label className={`${submitted && option.isCorrect ? 'is-correct' : ''} ${submitted && selected.includes(option.id) && !option.isCorrect ? 'is-incorrect' : ''}`} key={option.id}><input type={multiple ? 'checkbox' : 'radio'} name={`quiz-${block.id}`} checked={selected.includes(option.id)} onChange={() => choose(option.id)} /><span>{option.text}</span></label>)}</div>{submitted ? <p className={`learner-feedback ${passed ? 'is-correct' : 'is-incorrect'}`} role="status">{passed ? 'Correct.' : 'Not quite. Review the lesson and try again.'}</p> : null}{submitted && block.data.explanation ? <p className="learner-explanation">{block.data.explanation}</p> : null}<button type="button" className="learner-primary" onClick={() => setSubmitted(true)}>{selected.length ? 'Check Answer' : 'Choose an answer'}</button></div></section>
 }
 
+export function toggleRevealedHint(current: ReadonlySet<string>, id: string): ReadonlySet<string> { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next }
+
+export function HintPreview({ block }: { block: Extract<ContentBlock, { type: 'hint' }> }) {
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
+  const toggle = (id: string) => setRevealed((current) => toggleRevealedHint(current, id))
+  return <section className="learner-hints content-section" aria-label="Hints"><h3>Hints</h3>{block.data.hints.map((hint) => { const open = revealed.has(hint.id); return <article key={hint.id}><header><h4>{hint.title}</h4><button type="button" aria-expanded={open} aria-controls={`hint-${hint.id}`} onClick={() => toggle(hint.id)}>{open ? 'Hide' : 'Reveal'}</button></header>{open ? <div id={`hint-${hint.id}`} className="learner-reading"><RichNodes node={hint.content as unknown as Record<string, unknown>} /></div> : null}</article> })}</section>
+}
+
 function PreviewBlock({ block }: { block: ContentBlock }) {
   switch (block.type) {
     case 'richText': return <section className="learner-reading content-section"><RichNodes node={block.data.document as unknown as Record<string, unknown>} /></section>
     case 'image': { const presentation = imagePresentation(block.data), boxed = presentation.size === 'custom' && !presentation.preserveAspectRatio && presentation.heightUnit === 'px'; return <figure className={`learner-image learner-image--${presentation.alignment} learner-image--fit-${presentation.objectFit} ${boxed ? 'learner-image--boxed' : ''} content-section`} style={imageDisplayStyle(block.data)}><ContentImage data={block.data} />{block.data.caption ? <figcaption>{block.data.caption}</figcaption> : null}</figure> }
     case 'code': return <CodeCard {...block.data} />
     case 'callout': { const variant = calloutVariant(block.data.tone); return <aside className={`learner-callout learner-callout--${block.data.tone} content-section`}><span aria-hidden="true">{variant.icon}</span><div><strong>{block.data.title || variant.label}</strong><RichNodes node={block.data.content as unknown as Record<string, unknown>} /></div></aside> }
+    case 'hint': return <HintPreview block={block} />
     case 'divider': return <hr className={block.data.style === 'dashed' ? 'is-dashed' : ''} />
     case 'table': return <div className="learner-table content-section"><table><thead><tr>{block.data.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{block.data.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>
     case 'quiz': return <QuizPreview block={block} />

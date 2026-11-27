@@ -28,7 +28,7 @@ describe('Studio authoring UX contracts', () => {
 
   it('groups every Course block in the compact picker exactly once', () => {
     const types = COURSE_BLOCK_GROUPS.flatMap(({ types: values }) => values)
-    expect(types).toEqual(['richText', 'callout', 'image', 'table', 'divider', 'code', 'expectedOutput', 'solution', 'quiz', 'exercise'])
+    expect(types).toEqual(['richText', 'callout', 'hint', 'image', 'table', 'divider', 'code', 'expectedOutput', 'solution', 'quiz', 'exercise'])
     expect(new Set(types).size).toBe(types.length)
   })
 

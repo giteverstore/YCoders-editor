@@ -110,7 +110,7 @@ export function removeBlock(document: CourseDocument, lessonId: string, blockId:
 }
 
 export function duplicateBlock(document: CourseDocument, lessonId: string, blockId: string, ids: IdFactory = defaultId): CourseDocument {
-  return updateLessonBlocks(document, lessonId, (blocks) => { const index = blocks.findIndex((block) => block.id === blockId); if (index >= 0) blocks.splice(index + 1, 0, { ...structuredClone(blocks[index]), id: ids() }) })
+  return updateLessonBlocks(document, lessonId, (blocks) => { const index = blocks.findIndex((block) => block.id === blockId); if (index >= 0) { const duplicate = { ...structuredClone(blocks[index]), id: ids() }; if (duplicate.type === 'hint') duplicate.data.hints.forEach((hint) => { hint.id = ids() }); blocks.splice(index + 1, 0, duplicate) } })
 }
 
 export function reorderBlock(document: CourseDocument, lessonId: string, blockId: string, targetIndex: number): CourseDocument {
