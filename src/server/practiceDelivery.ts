@@ -29,7 +29,7 @@ export class PracticeDeliveryService {
     const result = adaptPractice({ identity: record.identity, document, assetManifest: record.assetManifest as PublishedAssetManifestEntry[] })
     if (!result.ok) throw new DeliveryError('V2_ADAPTER_INCOMPATIBLE', 'V2 Practice cannot be represented by the frozen learner contract', 422, { classification: result.classification, errors: result.errors, warnings: result.warnings })
     const serialized = JSON.stringify(result.value)
-    if (serialized.includes('referenceSolutions') || serialized.includes('publishedObjectPath') || serialized.includes('draftRevision')) throw new DeliveryError('V2_DTO_SAFETY_FAILURE', 'V2 Practice learner DTO failed safety validation', 503)
+    if (/referenceSolutions|trustedVerification|privateTests/.test(serialized) || serialized.includes('publishedObjectPath') || serialized.includes('draftRevision')) throw new DeliveryError('V2_DTO_SAFETY_FAILURE', 'V2 Practice learner DTO failed safety validation', 503)
     return { namespace: 'v2', contentType: 'practice', contentId, publicationVersion: version, practice: result.value, integrity: { artifactHash: record.artifactHash, documentHash: record.documentHash, assetManifestHash: record.assetManifestHash, verified: true }, warnings: result.warnings }
   }
 

@@ -24,6 +24,11 @@ export const practiceContentSchema = z.object({
   verification: z.object({ strategy: z.enum(['exact', 'trimmed', 'json-equivalent']), caseSensitive: z.boolean(), numericTolerance: z.number().positive().optional() }).strict(),
   execution: practiceExecutionContractSchema.optional(),
   executablePublicTests: z.array(executablePracticeTestCaseSchema).min(1).max(100).optional(),
+  trustedVerification: z.object({
+    policyVersion: z.string().regex(/^practice-verifier-v[1-9][0-9]*$/),
+    privateTests: z.array(executablePracticeTestCaseSchema).min(1).max(200),
+    limits: z.object({ timeoutMs: z.number().int().min(100).max(30_000), memoryMb: z.number().int().min(16).max(1024), outputBytes: z.number().int().min(1024).max(1_000_000) }).strict(),
+  }).strict().optional(),
   instructions: domainBlocksSchema('practice'),
 }).strict().superRefine((value, context) => {
   const supported = new Set(value.languages.supported.map((language) => language.id))
@@ -35,6 +40,7 @@ export const practiceContentSchema = z.object({
   if (new Set(identifiers).size !== identifiers.length) context.addIssue({ code: 'custom', message: 'Example, hint, and test-case IDs must be unique' })
   if ((value.execution === undefined) !== (value.executablePublicTests === undefined)) context.addIssue({ code: 'custom', path: ['execution'], message: 'Execution contract and executable public tests must be supplied together' })
   value.executablePublicTests?.forEach((test, index) => { if (test.mode !== value.execution?.mode) context.addIssue({ code: 'custom', path: ['executablePublicTests', index, 'mode'], message: 'Public test mode must match the execution contract' }) })
+  value.trustedVerification?.privateTests.forEach((test, index) => { if (test.mode !== value.execution?.mode) context.addIssue({ code: 'custom', path: ['trustedVerification', 'privateTests', index, 'mode'], message: 'Private test mode must match the execution contract' }) })
 })
 
 export type PracticeContent = z.infer<typeof practiceContentSchema>
