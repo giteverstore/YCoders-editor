@@ -15,7 +15,7 @@ import {
 import { V2_DRAFT_COLLECTION } from './firestoreDraftRepository.js'
 import { CourseDeliveryService, DeliveryError } from './courseDelivery.js'
 import type { AdapterFinding } from '../integration/learnerAdapter.types.js'
-import { adaptCourse } from '../integration/learnerAdapters.js'
+import { adaptCourse, adaptPractice } from '../integration/learnerAdapters.js'
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 export const V2_PUBLICATION_REQUEST_COLLECTION = 'editorV2PublicationRequests'
@@ -123,7 +123,7 @@ export class PublicationBackend {
     const pointer = await this.pointer(contentId)
     if (pointer && !canTransition(pointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${pointer.state}`, 409)
     const proposedVersionNumber = (pointer?.latestVersionNumber ?? 0) + 1
-    const compatibility = courseCompatibility(document, manifest, proposedVersionNumber, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
+    const compatibility = learnerCompatibility(document, manifest, proposedVersionNumber, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previous = pointer?.activeVersionNumber ? await this.version(contentId, pointer.activeVersionNumber) : null
     const findings = [...compatibility.findings, ...(previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : [])]
     const documentHash = await sha256Canonical(document), manifestHash = await sha256Canonical(manifest)
@@ -158,7 +158,7 @@ export class PublicationBackend {
     const previousPointer = await this.pointer(input.contentId)
     if (previousPointer && !canTransition(previousPointer.state, 'publish-new-version')) throw new PublicationError('INVALID_TRANSITION', `Publishing a new version is not allowed from ${previousPointer.state}`, 409)
     const proposedVersion = (previousPointer?.latestVersionNumber ?? 0) + 1
-    const compatibility = courseCompatibility(document, manifest, proposedVersion, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
+    const compatibility = learnerCompatibility(document, manifest, proposedVersion, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }))
     const previous = previousPointer?.activeVersionNumber ? await this.version(input.contentId, previousPointer.activeVersionNumber) : null
     const stableFindings = previous?.document ? compareStableIds(contentEnvelopeSchema.parse(previous.document), document) : []
     const findings = [...compatibility.findings, ...stableFindings]
@@ -232,12 +232,15 @@ export class PublicationBackend {
   private pointerRef(contentId: string) { return this.firestore.collection(V2_PUBLICATION_COLLECTION).doc(contentId) }
 }
 
-export function courseCompatibility(document: ContentDocument, manifest: Manifest, proposedVersionNumber: number, compatibility: ReturnType<typeof validatePublicationCompatibility>): ReturnType<typeof validatePublicationCompatibility> {
-  if (document.contentType !== 'course' || !compatibility.schemaValid) return compatibility
-  const adapted = adaptCourse({ identity: { namespace: 'v2', contentType: 'course', contentId: document.id, publicationVersion: proposedVersionNumber }, document, assetManifest: manifest })
+export function learnerCompatibility(document: ContentDocument, manifest: Manifest, proposedVersionNumber: number, compatibility: ReturnType<typeof validatePublicationCompatibility>): ReturnType<typeof validatePublicationCompatibility> {
+  if (!compatibility.schemaValid || (document.contentType !== 'course' && document.contentType !== 'practice')) return compatibility
+  const identity = { namespace: 'v2' as const, contentType: document.contentType, contentId: document.id, publicationVersion: proposedVersionNumber }
+  const adapted = document.contentType === 'course'
+    ? adaptCourse({ identity, document, assetManifest: manifest })
+    : adaptPractice({ identity, document, assetManifest: manifest })
   const adapterFindings = adapted.ok ? adapted.warnings : [...adapted.errors, ...adapted.warnings]
   const findings = [...compatibility.findings, ...adapterFindings.map(({ domain, severity, path, code, message, requiredAction }) => ({ domain, severity, path, code, explanation: message, requiredAction, evidence: 'confirmed-by-inspected-source' as const }))]
-  const ready = adapted.ok && compatibility.learnerRuntimeCompatible && !findings.some(({ severity }) => severity === 'error')
+  const ready = compatibility.storageReady && compatibility.learnerRuntimeCompatible && adapted.ok && !findings.some(({ severity }) => severity === 'error')
   return { ...compatibility, learnerIntegrationReady: ready, findings }
 }
 

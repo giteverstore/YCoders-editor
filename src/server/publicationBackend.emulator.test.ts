@@ -7,7 +7,7 @@ import { validChallengeDocument, validCourseDocument, validPracticeDocument, val
 import { compareStableIds, sha256Canonical, validatePublicationCompatibility } from '../publication/publicationContracts'
 import { assertEmulatorTestEnvironment, EMULATOR_PROJECT_ID } from './emulatorSafety'
 import { getAssetServerDependencies, getPublicationServerDependencies, getServerDependencies } from './firebaseAdmin.server'
-import { hashBytes, V2_PUBLICATION_REQUEST_COLLECTION } from './publicationBackend'
+import { hashBytes, learnerCompatibility, V2_PUBLICATION_REQUEST_COLLECTION } from './publicationBackend'
 import { V2_PUBLICATION_COLLECTION } from '../publication/publicationContracts'
 import { handlePublicationApi } from './publicationApi'
 
@@ -34,6 +34,19 @@ describe('immutable publication backend', () => {
     }
     for (const path of ['publishedContent/sentinel', 'adminContentDrafts/sentinel', 'adminContentAssets/sentinel', 'adminContentAudit/sentinel', 'dailyChallenges/sentinel', 'learnerProgress/sentinel', 'certificates/sentinel']) expect((await firestore.doc(path).get()).data()).toEqual({ untouched: true })
   }, 30_000)
+
+  it('uses the same Practice learner readiness for prepare and the stored publication snapshot', async () => {
+    const document = structuredClone(validPracticeDocument) as ContentDocument
+    document.id = '20000000-0000-4000-8000-000000000091'; document.slug = 'practice-readiness-parity'
+    await getServerDependencies().repository.create(document, tokens.get('CONTENT_EDITOR')!.uid)
+    const backend = getPublicationServerDependencies().backend, actorUid = tokens.get('CONTENT_ADMIN')!.uid
+    const preparation = await backend.prepare(document.id, 1, actorUid)
+    expect(preparation).toMatchObject({ schemaValid: true, storageReady: true, learnerRuntimeCompatible: true, learnerIntegrationReady: true, findings: [] })
+    await backend.publish({ contentId: document.id, expectedDraftRevision: 1, expectedPointerRevision: preparation.pointerRevision, requestId: crypto.randomUUID(), confirmation: confirmationFromPreparation(preparation) }, actorUid)
+    const stored = await backend.version(document.id, 1) as { compatibilitySnapshot: typeof preparation }
+    expect(stored.compatibilitySnapshot).toMatchObject({ schemaValid: true, storageReady: true, learnerRuntimeCompatible: true, learnerIntegrationReady: true, findings: [] })
+    expect(stored.compatibilitySnapshot.learnerIntegrationReady).toBe(preparation.learnerIntegrationReady)
+  })
 
   it('publishes a second immutable Course version and preserves exact version one', async () => {
     const document = structuredClone(validCourseDocument) as ContentDocument
@@ -222,7 +235,7 @@ async function publishThroughApi(document: ContentDocument, draftRevision: numbe
   return callApi(document.id, 'POST', 'publish', { expectedDraftRevision: draftRevision, expectedPointerRevision: pointerRevision, requestId: crypto.randomUUID(), confirmation }, role)
 }
 async function confirmationFor(document: ContentDocument, draftRevision: number, pointerRevision: number, version: number, operation: 'publish' | 'publish-new-version', actorUid: string, previous?: ContentDocument, manifest: Array<{ assetId: string; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; byteLength: number; width: number; height: number; contentHash: string; publishedObjectPath: string }> = []) {
-  const compatibility = validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) }), findings = [...compatibility.findings, ...(previous ? compareStableIds(previous, document) : [])]
+  const compatibility = learnerCompatibility(document, manifest, version, validatePublicationCompatibility(document, { resolvedAssetIds: new Set(manifest.map(({ assetId }) => assetId)) })), findings = [...compatibility.findings, ...(previous ? compareStableIds(previous, document) : [])]
   return { contentId: document.id, contentType: document.contentType, draftRevision, documentVersion: document.documentVersion, draftFingerprint: await sha256Canonical(document), validationFingerprint: await sha256Canonical({ ...compatibility, findings }), pointerRevision, proposedVersionNumber: version, assetManifestHash: await sha256Canonical(manifest), assetIds: manifest.map(({ assetId }) => assetId), actorUid, operation, issuedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(), completedSteps: [true, true, true] as const }
 }
 function confirmationFromPreparation(preparation: Awaited<ReturnType<ReturnType<typeof getPublicationServerDependencies>['backend']['prepare']>>) { return { contentId: preparation.contentId, contentType: preparation.contentType, draftRevision: preparation.draftRevision, documentVersion: preparation.documentVersion, draftFingerprint: preparation.draftFingerprint, validationFingerprint: preparation.validationFingerprint, pointerRevision: preparation.pointerRevision, proposedVersionNumber: preparation.proposedVersionNumber, assetManifestHash: preparation.assetManifestHash, assetIds: preparation.assetIds, actorUid: preparation.actorUid, operation: preparation.operation, issuedAt: preparation.issuedAt, expiresAt: preparation.expiresAt, completedSteps: [true, true, true] as const } }

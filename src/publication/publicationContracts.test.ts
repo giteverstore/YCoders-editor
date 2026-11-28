@@ -3,7 +3,7 @@ import { adminRoles } from '../auth/permissions'
 import type { ContentDocument } from '../content/core/envelope'
 import { validChallengeDocument, validCourseDocument, validPracticeDocument, validProjectDocument } from '../content/fixtures/validDocuments'
 import { assetManifestEntrySchema, canPublish, canTransition, canonicalJson, collectAssetIds, compareStableIds, evaluateIdempotency, nextState, nextVersionNumber, publicationIdentitySchema, publicationPointerSchema, publicationVersionSchema, sha256Canonical, validatePublicationCompatibility } from './publicationContracts'
-import { courseCompatibility } from '../server/publicationBackend'
+import { learnerCompatibility } from '../server/publicationBackend'
 
 const hash = (c = 'a') => `sha256:${c.repeat(64)}`
 const uuid = (last: string) => `a0000000-0000-4000-8000-${last.padStart(12, '0')}`
@@ -23,9 +23,32 @@ describe('final publication contracts', () => {
   it('surfaces adapter findings in Course readiness instead of false with no findings', () => {
     const document = structuredClone(validCourseDocument)
     document.content.courseIconAssetId = uuid('9')
-    const report = courseCompatibility(document, [], 2, validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('9')]) }))
+    const report = learnerCompatibility(document, [], 2, validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('9')]) }))
     expect(report.learnerIntegrationReady).toBe(false)
     expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'course.icon-manifest-missing', path: '$.content.courseIconAssetId' })]))
+  })
+  it('marks a learner-safe Practice publication ready without requiring trusted content', () => {
+    const document = structuredClone(validPracticeDocument) as ContentDocument
+    if (document.contentType !== 'practice') throw new Error('Expected Practice fixture')
+    delete document.content.trustedVerification
+    document.content.referenceSolutions = []
+    const report = learnerCompatibility(document, [], 1, validatePublicationCompatibility(document))
+    expect(report).toMatchObject({ schemaValid: true, storageReady: true, learnerRuntimeCompatible: true, learnerIntegrationReady: true, findings: [] })
+  })
+  it('keeps Practice unready and reports adapter failures', () => {
+    const document = structuredClone(validPracticeDocument) as ContentDocument
+    if (document.contentType !== 'practice') throw new Error('Expected Practice fixture')
+    document.content.instructions.push({ id: uuid('91'), schemaVersion: 1, type: 'image', data: { assetId: uuid('92'), alt: 'Missing manifest asset' } })
+    const base = validatePublicationCompatibility(document, { resolvedAssetIds: new Set([uuid('92')]) })
+    const report = learnerCompatibility(document, [], 1, base)
+    expect(report.learnerIntegrationReady).toBe(false)
+    expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({ domain: 'practice', code: 'asset.manifest-missing', path: '$.content.instructions[1].data.assetId', severity: 'error' })]))
+  })
+  it('retains current compatibility behavior for non-learner publication domains', () => {
+    for (const document of [validChallengeDocument, validProjectDocument] as ContentDocument[]) {
+      const base = validatePublicationCompatibility(document)
+      expect(learnerCompatibility(document, [], 1, base)).toEqual(base)
+    }
   })
   it('makes namespace part of historical identity', () => {
     expect(publicationIdentitySchema.parse({ namespace: 'v2', contentType: 'course', contentId: validCourseDocument.id, publicationVersion: 1 }).namespace).toBe('v2')
